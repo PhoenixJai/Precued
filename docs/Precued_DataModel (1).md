@@ -1,6 +1,6 @@
 # Precued MVP — Data Model (Sales Call · Mock Trial · LD Debate)
 
-11 tables, one visibility engine (interface specified below — see "VisibilityEngine — Interface Spec"). Verticals (Sales Call, Mock Trial, LD Debate) are rows in `Template`/`TemplateRole`/`TemplatePreset` — no template-specific code anywhere in the schema.
+13 tables, one visibility engine (interface specified below — see "VisibilityEngine — Interface Spec"). Verticals (Sales Call, Mock Trial, LD Debate) are rows in `Template`/`TemplateRole`/`TemplatePreset` — no template-specific code anywhere in the schema.
 
 ## Design Decisions
 
@@ -34,6 +34,7 @@
 | role_key | string | e.g. `judge`, `jury` |
 | name | string | display label |
 | is_host_role | bool | who runs the room by default |
+| is_guest_role | bool | default `false`. Descriptive/UI-hint only — no runtime logic change (`ShareRoleGrant` already defaults to no-visibility for every role regardless of this flag) |
 | max_members | int \| null | null = unlimited (e.g. Jury, Audience) |
 | sort_order | int | |
 
