@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<testsuite xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="https://maven.apache.org/surefire/maven-surefire-plugin/xsd/surefire-test-report-3.0.xsd" version="3.0" name="com.precued.webhook.LiveKitWebhookHandlerTest" time="1.865" tests="9" errors="0" skipped="0" failures="0">
+<testsuite xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="https://maven.apache.org/surefire/maven-surefire-plugin/xsd/surefire-test-report-3.0.xsd" version="3.0" name="com.precued.service.ShareLifecycleServiceTest" time="0.142" tests="3" errors="0" skipped="0" failures="0">
   <properties>
     <property name="java.specification.version" value="21"/>
     <property name="sun.jnu.encoding" value="ANSI_X3.4-1968"/>
@@ -62,28 +62,7 @@
     <property name="sun.io.unicode.encoding" value="UnicodeLittle"/>
     <property name="java.class.version" value="65.0"/>
   </properties>
-  <testcase name="participantJoined_asPublisher_repushesEachOfTheirActiveShares_inAdditionToRoomRecompute" classname="com.precued.webhook.LiveKitWebhookHandlerTest" time="1.63">
-    <system-err><![CDATA[WARNING: A Java agent has been loaded dynamically (/root/.m2/repository/net/bytebuddy/byte-buddy-agent/1.14.19/byte-buddy-agent-1.14.19.jar)
-WARNING: If a serviceability tool is in use, please run with -XX:+EnableDynamicAgentLoading to hide this warning
-WARNING: If a serviceability tool is not in use, please run with -Djdk.instrument.traceUsage for more information
-WARNING: Dynamic loading of agents will be disallowed by default in a future release
-]]></system-err>
-  </testcase>
-  <testcase name="trackPublished_shareTaggedButBelongsToDifferentPublisher_rejectedAndNoOp" classname="com.precued.webhook.LiveKitWebhookHandlerTest" time="0.075">
-    <system-out><![CDATA[18:50:59.864 [main] WARN com.precued.webhook.LiveKitWebhookHandler -- track_published for TR_forged tagged Share e50ec140-4346-437a-9b48-79d92868cec4 whose publisher does not match publishing identity 'host-1' (participant a37648d8-9cee-43af-b111-297e4794e1f1), no-op
-]]></system-out>
-  </testcase>
-  <testcase name="trackPublished_twoConcurrentActiveSharesForSamePublisher_eachAttributedViaItsOwnTag" classname="com.precued.webhook.LiveKitWebhookHandlerTest" time="0.023"/>
-  <testcase name="trackPublished_withValidShareIdTag_createsShareTrackAndRecomputes" classname="com.precued.webhook.LiveKitWebhookHandlerTest" time="0.014"/>
-  <testcase name="participantJoined_nonPublisher_onlyRecomputesTheRoom" classname="com.precued.webhook.LiveKitWebhookHandlerTest" time="0.009"/>
-  <testcase name="trackPublished_nameWithNonUuidPrefix_logsAndNoOps" classname="com.precued.webhook.LiveKitWebhookHandlerTest" time="0.008">
-    <system-out><![CDATA[18:50:59.947 [main] WARN com.precued.webhook.LiveKitWebhookHandler -- track_published for TR_bad2 has an unparseable name tag 'not-a-uuid:Exhibit A', no-op
-]]></system-out>
-  </testcase>
-  <testcase name="trackPublished_recomputesOnlyTheOwningShare" classname="com.precued.webhook.LiveKitWebhookHandlerTest" time="0.005"/>
-  <testcase name="trackPublished_nameWithNoDelimiter_logsAndNoOps" classname="com.precued.webhook.LiveKitWebhookHandlerTest" time="0.012">
-    <system-out><![CDATA[18:50:59.969 [main] WARN com.precued.webhook.LiveKitWebhookHandler -- track_published for TR_bad1 has an unparseable name tag 'not-a-tagged-name', no-op
-]]></system-out>
-  </testcase>
-  <testcase name="participantLeft_recomputesTheRoom" classname="com.precued.webhook.LiveKitWebhookHandlerTest" time="0.006"/>
+  <testcase name="start_createsShareAndRecomputes_whenPublisherHoldsHostRole" classname="com.precued.service.ShareLifecycleServiceTest" time="0.125"/>
+  <testcase name="start_rejectsPublisherWithNonHostRole_andDoesNotCreateAShare" classname="com.precued.service.ShareLifecycleServiceTest" time="0.006"/>
+  <testcase name="start_rejectsPublisherWithNoActiveAssignment_andDoesNotCreateAShare" classname="com.precued.service.ShareLifecycleServiceTest" time="0.005"/>
 </testsuite>

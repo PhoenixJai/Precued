@@ -4,13 +4,19 @@ import com.precued.engine.VisibilityEngine;
 import com.precued.entity.Room;
 import com.precued.entity.RoomParticipant;
 import com.precued.entity.Share;
+import com.precued.entity.ShareTrack;
 import com.precued.repository.RoomParticipantRepository;
 import com.precued.repository.RoomRepository;
 import com.precued.repository.ShareRepository;
 import com.precued.repository.ShareTrackRepository;
+import livekit.LivekitModels;
 import livekit.LivekitWebhook.WebhookEvent;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
+import java.time.Instant;
+import java.util.Optional;
 import java.util.UUID;
 
 /**
@@ -21,6 +27,8 @@ import java.util.UUID;
  */
 @Component
 public class LiveKitWebhookHandler {
+
+    private static final Logger log = LoggerFactory.getLogger(LiveKitWebhookHandler.class);
 
     private static final String PARTICIPANT_JOINED = "participant_joined";
     private static final String PARTICIPANT_LEFT = "participant_left";
@@ -75,8 +83,90 @@ public class LiveKitWebhookHandler {
     }
 
     private void onTrackPublished(WebhookEvent event) {
-        shareTrackRepository.findByLivekitTrackSid(event.getTrack().getSid())
-                .ifPresent(track -> engine.recomputeAndPushForShare(track.getShare().getId()));
+        String trackSid = event.getTrack().getSid();
+
+        // Already recorded (e.g. a redelivered webhook for the same track) —
+        // don't try to insert a second row over the unique track_sid, just
+        // recompute using the Share it's already attached to.
+        Optional<ShareTrack> existing = shareTrackRepository.findByLivekitTrackSid(trackSid);
+        if (existing.isPresent()) {
+            engine.recomputeAndPushForShare(existing.get().getShare().getId());
+            return;
+        }
+
+        ShareTrack.Kind kind = mapTrackKind(event.getTrack().getType());
+        if (kind == null) {
+            log.warn("track_published for {} has unsupported track type {}, no-op", trackSid, event.getTrack().getType());
+            return;
+        }
+
+        UUID roomId = resolveRoomId(event.getRoom().getName());
+        UUID publisherId = resolveParticipantId(roomId, event.getParticipant().getIdentity());
+
+        // The publisher's client tags the track's `name` as "<shareId>:<label>"
+        // at publish time (client-side contract — see ShareLifecycleService).
+        // This replaces counting the publisher's active Shares: a publisher
+        // can legitimately have more than one active Share at once (trigger
+        // table's "every active Share that participant publishes"), so
+        // "exactly one active Share" is not a valid way to identify which
+        // Share a track belongs to. The label half of the tag is redundant
+        // with Share.label already stored at creation and isn't needed here.
+        UUID shareId = parseShareIdTag(event.getTrack().getName());
+        if (shareId == null) {
+            log.warn("track_published for {} has an unparseable name tag '{}', no-op",
+                    trackSid, event.getTrack().getName());
+            return;
+        }
+
+        Optional<Share> taggedShare = shareRepository.findById(shareId);
+        if (taggedShare.isEmpty() || taggedShare.get().getStatus() != Share.Status.ACTIVE) {
+            log.warn("track_published for {} tagged Share {} that is missing or not active, no-op",
+                    trackSid, shareId);
+            return;
+        }
+
+        Share share = taggedShare.get();
+        if (!share.getPublisher().getId().equals(publisherId)) {
+            // Defense against a stale or forged tag: never trust it blindly.
+            log.warn(
+                    "track_published for {} tagged Share {} whose publisher does not match publishing identity"
+                            + " '{}' (participant {}), no-op",
+                    trackSid, shareId, event.getParticipant().getIdentity(), publisherId);
+            return;
+        }
+
+        ShareTrack track = new ShareTrack();
+        track.setShare(share);
+        track.setLivekitTrackSid(trackSid);
+        track.setKind(kind);
+        track.setPublishedAt(Instant.now());
+        shareTrackRepository.save(track);
+
+        engine.recomputeAndPushForShare(share.getId());
+    }
+
+    private static ShareTrack.Kind mapTrackKind(LivekitModels.TrackType type) {
+        return switch (type) {
+            case AUDIO -> ShareTrack.Kind.AUDIO;
+            case VIDEO -> ShareTrack.Kind.VIDEO;
+            default -> null;
+        };
+    }
+
+    /** Parses the "<shareId>:<label>" track-name tag; null if missing or malformed. */
+    private static UUID parseShareIdTag(String trackName) {
+        if (trackName == null) {
+            return null;
+        }
+        int delimiterIndex = trackName.indexOf(':');
+        if (delimiterIndex < 0) {
+            return null;
+        }
+        try {
+            return UUID.fromString(trackName.substring(0, delimiterIndex));
+        } catch (IllegalArgumentException e) {
+            return null;
+        }
     }
 
     private UUID resolveRoomId(String livekitRoomName) {
