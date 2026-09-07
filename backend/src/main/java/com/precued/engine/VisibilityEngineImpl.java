@@ -13,6 +13,8 @@ import com.precued.repository.ShareRoleGrantRepository;
 import com.precued.repository.ShareTrackRepository;
 import io.livekit.server.RoomServiceClient;
 import livekit.LivekitModels;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 import retrofit2.Response;
 
@@ -31,6 +33,8 @@ import java.util.UUID;
  */
 @Component
 public class VisibilityEngineImpl implements VisibilityEngine {
+
+    private static final Logger log = LoggerFactory.getLogger(VisibilityEngineImpl.class);
 
     /** Topic tag on the data message, so publisher clients can route it. */
     static final String GRANTS_TOPIC = "precued.visibility-grants";
@@ -135,7 +139,22 @@ public class VisibilityEngineImpl implements VisibilityEngine {
 
     @Override
     public void recomputeAndPushForRoom(UUID roomId) {
+        // Each Share's push is isolated: one publisher's push failing (bad
+        // LiveKit response, IO error) must not stop the others in the same
+        // room from getting their recompute — same fail-closed-per-participant
+        // blast-radius principle as the role-assignment race handling.
         shareRepository.findByRoomIdAndStatus(roomId, Share.Status.ACTIVE)
-                .forEach(share -> recomputeAndPushForShare(share.getId()));
+                .forEach(share -> {
+                    try {
+                        recomputeAndPushForShare(share.getId());
+                    } catch (RuntimeException e) {
+                        log.warn(
+                                "Failed to recompute/push visibility grants for share {} (publisher {}): {}",
+                                share.getId(),
+                                share.getPublisher().getLivekitIdentity(),
+                                e.getMessage(),
+                                e);
+                    }
+                });
     }
 }

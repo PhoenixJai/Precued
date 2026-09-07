@@ -1,6 +1,7 @@
 package com.precued.engine;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.core.type.TypeReference;
 import com.precued.entity.Room;
 import com.precued.entity.RoomParticipant;
 import com.precued.entity.Share;
@@ -105,6 +106,49 @@ class VisibilityEngineImplPushTest {
     }
 
     @Test
+    void pushGrantsToPublisher_sendsExactKindDestinationsAndSerializedPayload() throws IOException {
+        Room room = new Room();
+        room.setId(roomId);
+        room.setLivekitRoomName("room-42");
+
+        RoomParticipant publisher = new RoomParticipant();
+        publisher.setId(UUID.randomUUID());
+        publisher.setLivekitIdentity("host-1");
+
+        Share share = new Share();
+        share.setId(shareId);
+        share.setRoom(room);
+        share.setPublisher(publisher);
+
+        when(shareRepository.findById(shareId)).thenReturn(java.util.Optional.of(share));
+        stubSuccessfulSend();
+
+        List<ParticipantTrackPermission> grants = List.of(
+                new ParticipantTrackPermission("viewer-1", true, List.of("TR_video1", "TR_audio1")),
+                new ParticipantTrackPermission("viewer-2", false, List.of()));
+
+        engine.pushGrantsToPublisher(shareId, grants);
+
+        ArgumentCaptor<byte[]> payload = ArgumentCaptor.forClass(byte[].class);
+        ArgumentCaptor<List<String>> destinationSids = ArgumentCaptor.forClass(List.class);
+        ArgumentCaptor<List<String>> destinationIdentities = ArgumentCaptor.forClass(List.class);
+        verify(roomServiceClient).sendData(
+                eq("room-42"),
+                payload.capture(),
+                eq(LivekitModels.DataPacket.Kind.RELIABLE), // fails if a refactor swaps in LOSSY or any other kind
+                destinationSids.capture(),
+                destinationIdentities.capture(),
+                anyString());
+
+        assertThat(destinationSids.getValue()).isEmpty();
+        assertThat(destinationIdentities.getValue()).containsExactly("host-1");
+
+        List<ParticipantTrackPermission> deserialized = objectMapper.readValue(
+                payload.getValue(), new TypeReference<List<ParticipantTrackPermission>>() {});
+        assertThat(deserialized).containsExactlyElementsOf(grants);
+    }
+
+    @Test
     void recomputeAndPushForRoom_pushesToEveryActiveShareInTheRoom() throws IOException {
         Room room = new Room();
         room.setId(roomId);
@@ -137,6 +181,80 @@ class VisibilityEngineImplPushTest {
         verify(roomServiceClient, times(2)).sendData(
                 eq("room-42"), any(byte[].class), eq(LivekitModels.DataPacket.Kind.RELIABLE),
                 any(), any(), anyString());
+    }
+
+    @Test
+    void recomputeAndPushForRoom_isolatesFailurePerShare_continuesToOtherShares() throws IOException {
+        Room room = new Room();
+        room.setId(roomId);
+        room.setLivekitRoomName("room-42");
+
+        RoomParticipant publisherA = new RoomParticipant();
+        publisherA.setId(UUID.randomUUID());
+        publisherA.setLivekitIdentity("host-A");
+
+        RoomParticipant publisherB = new RoomParticipant();
+        publisherB.setId(UUID.randomUUID());
+        publisherB.setLivekitIdentity("host-B");
+
+        Share shareA = new Share();
+        shareA.setId(UUID.randomUUID());
+        shareA.setRoom(room);
+        shareA.setPublisher(publisherA);
+
+        Share shareB = new Share();
+        shareB.setId(UUID.randomUUID());
+        shareB.setRoom(room);
+        shareB.setPublisher(publisherB);
+
+        when(shareRepository.findByRoomIdAndStatus(roomId, Share.Status.ACTIVE))
+                .thenReturn(List.of(shareA, shareB));
+        when(shareRepository.findById(shareA.getId())).thenReturn(java.util.Optional.of(shareA));
+        when(shareRepository.findById(shareB.getId())).thenReturn(java.util.Optional.of(shareB));
+        when(shareTrackRepository.findByShareId(any())).thenReturn(List.of());
+        when(roomParticipantRepository.findByRoomId(roomId)).thenReturn(List.of());
+
+        // shareA's publisher push fails outright (simulated network error) ...
+        Call<Void> failingCall = mock(Call.class);
+        when(failingCall.execute()).thenThrow(new IOException("network blip"));
+        when(roomServiceClient.sendData(
+                anyString(),
+                any(byte[].class),
+                any(LivekitModels.DataPacket.Kind.class),
+                any(),
+                eq(List.of("host-A")),
+                anyString()))
+                .thenReturn(failingCall);
+
+        // ... but shareB's publisher push must still be attempted and succeed.
+        Call<Void> successCall = mock(Call.class);
+        when(successCall.execute()).thenReturn(Response.success(null));
+        when(roomServiceClient.sendData(
+                anyString(),
+                any(byte[].class),
+                any(LivekitModels.DataPacket.Kind.class),
+                any(),
+                eq(List.of("host-B")),
+                anyString()))
+                .thenReturn(successCall);
+
+        // Must not throw: shareA's failure is isolated, not propagated.
+        engine.recomputeAndPushForRoom(roomId);
+
+        verify(roomServiceClient).sendData(
+                eq("room-42"),
+                any(byte[].class),
+                eq(LivekitModels.DataPacket.Kind.RELIABLE),
+                any(),
+                eq(List.of("host-A")),
+                anyString());
+        verify(roomServiceClient).sendData(
+                eq("room-42"),
+                any(byte[].class),
+                eq(LivekitModels.DataPacket.Kind.RELIABLE),
+                any(),
+                eq(List.of("host-B")),
+                anyString());
     }
 
     @SuppressWarnings("unchecked")
