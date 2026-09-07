@@ -1,3 +1,8 @@
+/home/user/Precued/backend/src/test/java/com/precued/controller/ParticipantRoleAssignmentControllerTest.java
+/home/user/Precued/backend/src/test/java/com/precued/controller/RoomControllerTest.java
+/home/user/Precued/backend/src/test/java/com/precued/controller/RoomParticipantControllerTest.java
+/home/user/Precued/backend/src/test/java/com/precued/controller/ShareControllerTest.java
+/home/user/Precued/backend/src/test/java/com/precued/controller/ShareRoleGrantControllerTest.java
 /home/user/Precued/backend/src/test/java/com/precued/engine/VisibilityEngineImplPushTest.java
 /home/user/Precued/backend/src/test/java/com/precued/engine/VisibilityEngineImplTest.java
 /home/user/Precued/backend/src/test/java/com/precued/service/ShareLifecycleServiceTest.java
