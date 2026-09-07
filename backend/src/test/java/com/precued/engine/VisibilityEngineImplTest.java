@@ -6,11 +6,13 @@ import com.precued.entity.RoomParticipant;
 import com.precued.entity.RoomRole;
 import com.precued.entity.Share;
 import com.precued.entity.ShareRoleGrant;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.precued.repository.ParticipantRoleAssignmentRepository;
 import com.precued.repository.RoomParticipantRepository;
 import com.precued.repository.ShareRepository;
 import com.precued.repository.ShareRoleGrantRepository;
 import com.precued.repository.ShareTrackRepository;
+import io.livekit.server.RoomServiceClient;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -40,6 +42,8 @@ class VisibilityEngineImplTest {
     @Mock private RoomParticipantRepository roomParticipantRepository;
     @Mock private ParticipantRoleAssignmentRepository participantRoleAssignmentRepository;
     @Mock private ShareRoleGrantRepository shareRoleGrantRepository;
+    @Mock private RoomServiceClient roomServiceClient;
+    @Mock private ObjectMapper objectMapper;
 
     private VisibilityEngineImpl engine;
 
@@ -54,7 +58,9 @@ class VisibilityEngineImplTest {
                 shareTrackRepository,
                 roomParticipantRepository,
                 participantRoleAssignmentRepository,
-                shareRoleGrantRepository);
+                shareRoleGrantRepository,
+                roomServiceClient,
+                objectMapper);
 
         Room room = new Room();
         room.setId(roomId);
