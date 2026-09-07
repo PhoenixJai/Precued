@@ -1,6 +1,6 @@
 # Precued MVP — Data Model (Sales Call · Mock Trial · LD Debate)
 
-11 tables, one visibility engine (interface specified below — see "VisibilityEngine — Interface Spec"). Verticals (Sales Call, Mock Trial, LD Debate) are rows in `Template`/`TemplateRole`/`TemplatePreset` — no template-specific code anywhere in the schema.
+13 tables, one visibility engine (interface specified below — see "VisibilityEngine — Interface Spec"). Verticals (Sales Call, Mock Trial, LD Debate) are rows in `Template`/`TemplateRole`/`TemplatePreset` — no template-specific code anywhere in the schema.
 
 ## Design Decisions
 
@@ -34,6 +34,7 @@
 | role_key | string | e.g. `judge`, `jury` |
 | name | string | display label |
 | is_host_role | bool | who runs the room by default |
+| is_guest_role | bool | default `false`. Descriptive/UI-hint only — no runtime logic change (`ShareRoleGrant` already defaults to no-visibility for every role regardless of this flag) |
 | max_members | int \| null | null = unlimited (e.g. Jury, Audience) |
 | sort_order | int | |
 
@@ -192,11 +193,17 @@ Pure DB read + boolean join, matching the Runtime Rule above. No LiveKit call ha
 
 **Part B — Push to publisher + apply (backend → publisher's client → LiveKit)**
 
+**Transport decision: LiveKit data message, `RELIABLE` mode, targeted at the publisher's `participant_identity`.** Considered against a custom app-level websocket; rejected the websocket because the publisher's client is *already* connected to LiveKit by definition (they're the one publishing the Share) — a second connection would mean two independently-failing channels to reason about instead of one, for no benefit here (we're not planning to swap out LiveKit).
+
+**This is not "fire and forget."** LiveKit's own docs are explicit that reliable delivery is best-effort, not guaranteed: a receiver that is temporarily disconnected at the moment the packet is sent will not receive it, and packets are not buffered server-side beyond a limited number of retransmissions. There's also a documented edge case where a participant that has *just* connected can miss a reliable message sent immediately after the `participant_joined` event, because the transport isn't fully ready yet. Net effect: if the publisher's client is briefly down or mid-reconnect when we push, that update is simply gone — LiveKit will not queue and retry it for us later.
+
+Because `compute_grants_for_share` is a pure, idempotent function of DB state (Part A), we don't need our own message queue/retry system to compensate — we only need to guarantee we **re-push current state whenever the publisher (re)connects**, which is already a row in the trigger table below.
+
 ```
 1. Backend calls compute_grants_for_share(share_id) → permission list
-2. Backend sends the list to the Share's publisher_participant_id's client,
-   over our own channel (LiveKit data message, or existing websocket to
-   that client — not a new external dependency)
+2. Backend sends the list to the Share's publisher_participant_id's client
+   via a LiveKit data message (RELIABLE mode, targeted at that one
+   participant_identity — not room-wide)
 3. Publisher's client SDK calls:
      room.localParticipant.setTrackSubscriptionPermissions(
        false,                        // allParticipantsAllowed = false always
@@ -222,8 +229,9 @@ The engine runs Part A+B whenever one of these fires:
 | LiveKit webhook `participant_joined` | LiveKit → our webhook endpoint | every active Share in that room, for that one participant |
 | LiveKit webhook `participant_left` | LiveKit → our webhook endpoint | every active Share in that room (drop them from the list) |
 | LiveKit webhook `track_published` | LiveKit → our webhook endpoint | the Share that ShareTrack belongs to (attach new track_sid to existing grants) |
+| LiveKit webhook `participant_joined`, **specifically for a Share's own publisher reconnecting** | LiveKit → our webhook endpoint | re-push (not just recompute) current state for every active Share that participant publishes — covers the "message sent while they were briefly disconnected" gap, since Part A/B is idempotent and safe to re-run |
 
-Each row above is a discrete, already-observable event — no new infrastructure needed beyond a webhook receiver we need anyway for `Room`/`Share` lifecycle bookkeeping.
+Each row above is a discrete, already-observable event — no new infrastructure needed beyond a webhook receiver we need anyway for `Room`/`Share` lifecycle bookkeeping. The last row is not a new webhook type — it's the same `participant_joined` event, with the added rule that if the (re)connecting participant is a `publisher_participant_id` on any active `Share`, we re-push rather than assume our last push landed.
 
 ### Failure / race handling — fail closed per participant, not per room
 

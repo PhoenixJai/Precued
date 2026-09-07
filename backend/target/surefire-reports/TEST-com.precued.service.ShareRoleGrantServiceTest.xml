@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<testsuite xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="https://maven.apache.org/surefire/maven-surefire-plugin/xsd/surefire-test-report-3.0.xsd" version="3.0" name="com.precued.engine.VisibilityEngineImplTest" time="1.041" tests="3" errors="0" skipped="0" failures="0">
+<testsuite xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="https://maven.apache.org/surefire/maven-surefire-plugin/xsd/surefire-test-report-3.0.xsd" version="3.0" name="com.precued.service.ShareRoleGrantServiceTest" time="0.078" tests="1" errors="0" skipped="0" failures="0">
   <properties>
     <property name="java.specification.version" value="21"/>
     <property name="sun.jnu.encoding" value="ANSI_X3.4-1968"/>
@@ -62,7 +62,5 @@
     <property name="sun.io.unicode.encoding" value="UnicodeLittle"/>
     <property name="java.class.version" value="65.0"/>
   </properties>
-  <testcase name="noActiveAssignment_isNotAllowed_evenIfSomeGrantExists" classname="com.precued.engine.VisibilityEngineImplTest" time="1.01"/>
-  <testcase name="activeAssignmentWithActiveGrant_isAllowed" classname="com.precued.engine.VisibilityEngineImplTest" time="0.011"/>
-  <testcase name="activeAssignmentWithNoGrant_isNotAllowed" classname="com.precued.engine.VisibilityEngineImplTest" time="0.007"/>
+  <testcase name="revoke_recomputesOnlyThatOneShare" classname="com.precued.service.ShareRoleGrantServiceTest" time="0.076"/>
 </testsuite>
