@@ -150,7 +150,7 @@ class LiveKitWebhookHandlerTest {
     }
 
     @Test
-    void trackPublished_createsShareTrack_andRecomputes_whenExactlyOneActiveShareForPublisher() {
+    void trackPublished_withValidShareIdTag_createsShareTrackAndRecomputes() {
         givenRoomExists();
         RoomParticipant publisher = new RoomParticipant();
         publisher.setId(participantId);
@@ -159,19 +159,12 @@ class LiveKitWebhookHandlerTest {
 
         Share share = new Share();
         share.setId(UUID.randomUUID());
+        share.setStatus(Share.Status.ACTIVE);
+        share.setPublisher(publisher);
         when(shareTrackRepository.findByLivekitTrackSid("TR_video1")).thenReturn(Optional.empty());
-        when(shareRepository.findByPublisherIdAndStatus(participantId, Share.Status.ACTIVE))
-                .thenReturn(List.of(share));
+        when(shareRepository.findById(share.getId())).thenReturn(Optional.of(share));
 
-        WebhookEvent event = WebhookEvent.newBuilder()
-                .setEvent("track_published")
-                .setRoom(LivekitModels.Room.newBuilder().setName("room-42").build())
-                .setParticipant(LivekitModels.ParticipantInfo.newBuilder().setIdentity("host-1").build())
-                .setTrack(LivekitModels.TrackInfo.newBuilder()
-                        .setSid("TR_video1")
-                        .setType(LivekitModels.TrackType.VIDEO)
-                        .build())
-                .build();
+        WebhookEvent event = trackPublishedEvent("TR_video1", share.getId() + ":Exhibit A", "host-1");
 
         handler.handle(event);
 
@@ -187,30 +180,113 @@ class LiveKitWebhookHandlerTest {
     }
 
     @Test
-    void trackPublished_noActiveShareForPublisher_logsAndNoOps_withoutThrowingOrCreatingARow() {
+    void trackPublished_nameWithNoDelimiter_logsAndNoOps() {
+        givenRoomExists();
+        RoomParticipant publisher = new RoomParticipant();
+        publisher.setId(participantId);
+        when(roomParticipantRepository.findByRoomIdAndLivekitIdentity(roomId, "host-1"))
+                .thenReturn(Optional.of(publisher));
+        when(shareTrackRepository.findByLivekitTrackSid("TR_bad1")).thenReturn(Optional.empty());
+
+        WebhookEvent event = trackPublishedEvent("TR_bad1", "not-a-tagged-name", "host-1");
+
+        assertThatCode(() -> handler.handle(event)).doesNotThrowAnyException();
+
+        verify(shareTrackRepository, never()).save(any());
+        verify(engine, never()).recomputeAndPushForShare(any());
+        verify(shareRepository, never()).findById(any());
+    }
+
+    @Test
+    void trackPublished_nameWithNonUuidPrefix_logsAndNoOps() {
+        givenRoomExists();
+        RoomParticipant publisher = new RoomParticipant();
+        publisher.setId(participantId);
+        when(roomParticipantRepository.findByRoomIdAndLivekitIdentity(roomId, "host-1"))
+                .thenReturn(Optional.of(publisher));
+        when(shareTrackRepository.findByLivekitTrackSid("TR_bad2")).thenReturn(Optional.empty());
+
+        WebhookEvent event = trackPublishedEvent("TR_bad2", "not-a-uuid:Exhibit A", "host-1");
+
+        assertThatCode(() -> handler.handle(event)).doesNotThrowAnyException();
+
+        verify(shareTrackRepository, never()).save(any());
+        verify(engine, never()).recomputeAndPushForShare(any());
+        verify(shareRepository, never()).findById(any());
+    }
+
+    @Test
+    void trackPublished_shareTaggedButBelongsToDifferentPublisher_rejectedAndNoOp() {
+        givenRoomExists();
+        RoomParticipant publishingParticipant = new RoomParticipant();
+        publishingParticipant.setId(participantId);
+        when(roomParticipantRepository.findByRoomIdAndLivekitIdentity(roomId, "host-1"))
+                .thenReturn(Optional.of(publishingParticipant));
+
+        RoomParticipant actualOwner = new RoomParticipant();
+        actualOwner.setId(UUID.randomUUID());
+        Share share = new Share();
+        share.setId(UUID.randomUUID());
+        share.setStatus(Share.Status.ACTIVE);
+        share.setPublisher(actualOwner); // NOT publishingParticipant — stale/forged tag
+        when(shareTrackRepository.findByLivekitTrackSid("TR_forged")).thenReturn(Optional.empty());
+        when(shareRepository.findById(share.getId())).thenReturn(Optional.of(share));
+
+        WebhookEvent event = trackPublishedEvent("TR_forged", share.getId() + ":Exhibit A", "host-1");
+
+        assertThatCode(() -> handler.handle(event)).doesNotThrowAnyException();
+
+        verify(shareTrackRepository, never()).save(any());
+        verify(engine, never()).recomputeAndPushForShare(any());
+    }
+
+    @Test
+    void trackPublished_twoConcurrentActiveSharesForSamePublisher_eachAttributedViaItsOwnTag() {
         givenRoomExists();
         RoomParticipant publisher = new RoomParticipant();
         publisher.setId(participantId);
         when(roomParticipantRepository.findByRoomIdAndLivekitIdentity(roomId, "host-1"))
                 .thenReturn(Optional.of(publisher));
 
-        when(shareTrackRepository.findByLivekitTrackSid("TR_orphan")).thenReturn(Optional.empty());
-        when(shareRepository.findByPublisherIdAndStatus(participantId, Share.Status.ACTIVE))
-                .thenReturn(List.of());
+        Share shareA = new Share();
+        shareA.setId(UUID.randomUUID());
+        shareA.setStatus(Share.Status.ACTIVE);
+        shareA.setPublisher(publisher);
 
-        WebhookEvent event = WebhookEvent.newBuilder()
+        Share shareB = new Share();
+        shareB.setId(UUID.randomUUID());
+        shareB.setStatus(Share.Status.ACTIVE);
+        shareB.setPublisher(publisher);
+
+        when(shareTrackRepository.findByLivekitTrackSid("TR_a")).thenReturn(Optional.empty());
+        when(shareTrackRepository.findByLivekitTrackSid("TR_b")).thenReturn(Optional.empty());
+        when(shareRepository.findById(shareA.getId())).thenReturn(Optional.of(shareA));
+        when(shareRepository.findById(shareB.getId())).thenReturn(Optional.of(shareB));
+
+        handler.handle(trackPublishedEvent("TR_a", shareA.getId() + ":Exhibit A", "host-1"));
+        handler.handle(trackPublishedEvent("TR_b", shareB.getId() + ":Exhibit B", "host-1"));
+
+        ArgumentCaptor<ShareTrack> captor = ArgumentCaptor.forClass(ShareTrack.class);
+        verify(shareTrackRepository, org.mockito.Mockito.times(2)).save(captor.capture());
+        List<ShareTrack> saved = captor.getAllValues();
+        assertThat(saved).extracting(ShareTrack::getLivekitTrackSid).containsExactly("TR_a", "TR_b");
+        assertThat(saved.get(0).getShare()).isSameAs(shareA);
+        assertThat(saved.get(1).getShare()).isSameAs(shareB);
+
+        verify(engine).recomputeAndPushForShare(shareA.getId());
+        verify(engine).recomputeAndPushForShare(shareB.getId());
+    }
+
+    private static WebhookEvent trackPublishedEvent(String trackSid, String trackName, String publisherIdentity) {
+        return WebhookEvent.newBuilder()
                 .setEvent("track_published")
                 .setRoom(LivekitModels.Room.newBuilder().setName("room-42").build())
-                .setParticipant(LivekitModels.ParticipantInfo.newBuilder().setIdentity("host-1").build())
+                .setParticipant(LivekitModels.ParticipantInfo.newBuilder().setIdentity(publisherIdentity).build())
                 .setTrack(LivekitModels.TrackInfo.newBuilder()
-                        .setSid("TR_orphan")
+                        .setSid(trackSid)
+                        .setName(trackName)
                         .setType(LivekitModels.TrackType.VIDEO)
                         .build())
                 .build();
-
-        assertThatCode(() -> handler.handle(event)).doesNotThrowAnyException();
-
-        verify(shareTrackRepository, never()).save(any());
-        verify(engine, never()).recomputeAndPushForShare(any());
     }
 }
