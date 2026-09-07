@@ -1,6 +1,7 @@
 package com.precued.engine;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.core.type.TypeReference;
 import com.precued.entity.Room;
 import com.precued.entity.RoomParticipant;
 import com.precued.entity.Share;
@@ -102,6 +103,49 @@ class VisibilityEngineImplPushTest {
 
         assertThat(destinationIdentities.getValue()).containsExactly("host-1");
         assertThat(destinationSids.getValue()).isEmpty();
+    }
+
+    @Test
+    void pushGrantsToPublisher_sendsExactKindDestinationsAndSerializedPayload() throws IOException {
+        Room room = new Room();
+        room.setId(roomId);
+        room.setLivekitRoomName("room-42");
+
+        RoomParticipant publisher = new RoomParticipant();
+        publisher.setId(UUID.randomUUID());
+        publisher.setLivekitIdentity("host-1");
+
+        Share share = new Share();
+        share.setId(shareId);
+        share.setRoom(room);
+        share.setPublisher(publisher);
+
+        when(shareRepository.findById(shareId)).thenReturn(java.util.Optional.of(share));
+        stubSuccessfulSend();
+
+        List<ParticipantTrackPermission> grants = List.of(
+                new ParticipantTrackPermission("viewer-1", true, List.of("TR_video1", "TR_audio1")),
+                new ParticipantTrackPermission("viewer-2", false, List.of()));
+
+        engine.pushGrantsToPublisher(shareId, grants);
+
+        ArgumentCaptor<byte[]> payload = ArgumentCaptor.forClass(byte[].class);
+        ArgumentCaptor<List<String>> destinationSids = ArgumentCaptor.forClass(List.class);
+        ArgumentCaptor<List<String>> destinationIdentities = ArgumentCaptor.forClass(List.class);
+        verify(roomServiceClient).sendData(
+                eq("room-42"),
+                payload.capture(),
+                eq(LivekitModels.DataPacket.Kind.RELIABLE), // fails if a refactor swaps in LOSSY or any other kind
+                destinationSids.capture(),
+                destinationIdentities.capture(),
+                anyString());
+
+        assertThat(destinationSids.getValue()).isEmpty();
+        assertThat(destinationIdentities.getValue()).containsExactly("host-1");
+
+        List<ParticipantTrackPermission> deserialized = objectMapper.readValue(
+                payload.getValue(), new TypeReference<List<ParticipantTrackPermission>>() {});
+        assertThat(deserialized).containsExactlyElementsOf(grants);
     }
 
     @Test
