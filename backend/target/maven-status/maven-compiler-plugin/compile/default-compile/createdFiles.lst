@@ -3,6 +3,7 @@ com/precued/service/ParticipantRoleAssignmentService.class
 com/precued/webhook/LiveKitWebhookController.class
 com/precued/service/ShareLifecycleService.class
 com/precued/config/LiveKitConfig.class
+com/precued/webhook/LiveKitWebhookHandler$1.class
 com/precued/service/ShareRoleGrantService.class
 com/precued/engine/VisibilityEngineImpl.class
 com/precued/webhook/LiveKitWebhookHandler.class

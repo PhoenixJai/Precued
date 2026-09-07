@@ -2,4 +2,5 @@ com/precued/webhook/LiveKitWebhookHandlerTest.class
 com/precued/engine/VisibilityEngineImplTest.class
 com/precued/engine/VisibilityEngineImplPushTest$1.class
 com/precued/engine/VisibilityEngineImplPushTest.class
+com/precued/service/ShareLifecycleServiceTest.class
 com/precued/service/ShareRoleGrantServiceTest.class

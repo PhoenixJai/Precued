@@ -4,13 +4,20 @@ import com.precued.engine.VisibilityEngine;
 import com.precued.entity.Room;
 import com.precued.entity.RoomParticipant;
 import com.precued.entity.Share;
+import com.precued.entity.ShareTrack;
 import com.precued.repository.RoomParticipantRepository;
 import com.precued.repository.RoomRepository;
 import com.precued.repository.ShareRepository;
 import com.precued.repository.ShareTrackRepository;
+import livekit.LivekitModels;
 import livekit.LivekitWebhook.WebhookEvent;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
+import java.time.Instant;
+import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 /**
@@ -21,6 +28,8 @@ import java.util.UUID;
  */
 @Component
 public class LiveKitWebhookHandler {
+
+    private static final Logger log = LoggerFactory.getLogger(LiveKitWebhookHandler.class);
 
     private static final String PARTICIPANT_JOINED = "participant_joined";
     private static final String PARTICIPANT_LEFT = "participant_left";
@@ -75,8 +84,57 @@ public class LiveKitWebhookHandler {
     }
 
     private void onTrackPublished(WebhookEvent event) {
-        shareTrackRepository.findByLivekitTrackSid(event.getTrack().getSid())
-                .ifPresent(track -> engine.recomputeAndPushForShare(track.getShare().getId()));
+        String trackSid = event.getTrack().getSid();
+
+        // Already recorded (e.g. a redelivered webhook for the same track) —
+        // don't try to insert a second row over the unique track_sid, just
+        // recompute using the Share it's already attached to.
+        Optional<ShareTrack> existing = shareTrackRepository.findByLivekitTrackSid(trackSid);
+        if (existing.isPresent()) {
+            engine.recomputeAndPushForShare(existing.get().getShare().getId());
+            return;
+        }
+
+        ShareTrack.Kind kind = mapTrackKind(event.getTrack().getType());
+        if (kind == null) {
+            log.warn("track_published for {} has unsupported track type {}, no-op", trackSid, event.getTrack().getType());
+            return;
+        }
+
+        UUID roomId = resolveRoomId(event.getRoom().getName());
+        UUID publisherId = resolveParticipantId(roomId, event.getParticipant().getIdentity());
+
+        // Defensive: Share creation should always precede a track publish,
+        // but webhook ordering/timing isn't fully in our control. Only
+        // attach the track when there's exactly one active Share for this
+        // publisher — zero means we haven't (yet) recorded their Share, and
+        // more than one is ambiguous; either way, never guess which Share
+        // a track belongs to.
+        List<Share> activeShares = shareRepository.findByPublisherIdAndStatus(publisherId, Share.Status.ACTIVE);
+        if (activeShares.size() != 1) {
+            log.warn(
+                    "track_published for {} found {} active Share(s) for publisher {} in room {}, expected exactly 1, no-op",
+                    trackSid, activeShares.size(), publisherId, roomId);
+            return;
+        }
+
+        Share share = activeShares.get(0);
+        ShareTrack track = new ShareTrack();
+        track.setShare(share);
+        track.setLivekitTrackSid(trackSid);
+        track.setKind(kind);
+        track.setPublishedAt(Instant.now());
+        shareTrackRepository.save(track);
+
+        engine.recomputeAndPushForShare(share.getId());
+    }
+
+    private static ShareTrack.Kind mapTrackKind(LivekitModels.TrackType type) {
+        return switch (type) {
+            case AUDIO -> ShareTrack.Kind.AUDIO;
+            case VIDEO -> ShareTrack.Kind.VIDEO;
+            default -> null;
+        };
     }
 
     private UUID resolveRoomId(String livekitRoomName) {

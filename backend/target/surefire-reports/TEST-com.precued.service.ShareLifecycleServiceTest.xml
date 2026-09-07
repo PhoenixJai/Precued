@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<testsuite xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="https://maven.apache.org/surefire/maven-surefire-plugin/xsd/surefire-test-report-3.0.xsd" version="3.0" name="com.precued.webhook.LiveKitWebhookHandlerTest" time="1.788" tests="6" errors="0" skipped="0" failures="0">
+<testsuite xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="https://maven.apache.org/surefire/maven-surefire-plugin/xsd/surefire-test-report-3.0.xsd" version="3.0" name="com.precued.service.ShareLifecycleServiceTest" time="0.1" tests="3" errors="0" skipped="0" failures="0">
   <properties>
     <property name="java.specification.version" value="21"/>
     <property name="sun.jnu.encoding" value="ANSI_X3.4-1968"/>
@@ -62,19 +62,7 @@
     <property name="sun.io.unicode.encoding" value="UnicodeLittle"/>
     <property name="java.class.version" value="65.0"/>
   </properties>
-  <testcase name="participantJoined_asPublisher_repushesEachOfTheirActiveShares_inAdditionToRoomRecompute" classname="com.precued.webhook.LiveKitWebhookHandlerTest" time="1.596">
-    <system-err><![CDATA[WARNING: A Java agent has been loaded dynamically (/root/.m2/repository/net/bytebuddy/byte-buddy-agent/1.14.19/byte-buddy-agent-1.14.19.jar)
-WARNING: If a serviceability tool is in use, please run with -XX:+EnableDynamicAgentLoading to hide this warning
-WARNING: If a serviceability tool is not in use, please run with -Djdk.instrument.traceUsage for more information
-WARNING: Dynamic loading of agents will be disallowed by default in a future release
-]]></system-err>
-  </testcase>
-  <testcase name="participantJoined_nonPublisher_onlyRecomputesTheRoom" classname="com.precued.webhook.LiveKitWebhookHandlerTest" time="0.008"/>
-  <testcase name="trackPublished_createsShareTrack_andRecomputes_whenExactlyOneActiveShareForPublisher" classname="com.precued.webhook.LiveKitWebhookHandlerTest" time="0.071"/>
-  <testcase name="trackPublished_recomputesOnlyTheOwningShare" classname="com.precued.webhook.LiveKitWebhookHandlerTest" time="0.005"/>
-  <testcase name="trackPublished_noActiveShareForPublisher_logsAndNoOps_withoutThrowingOrCreatingARow" classname="com.precued.webhook.LiveKitWebhookHandlerTest" time="0.016">
-    <system-out><![CDATA[18:37:54.942 [main] WARN com.precued.webhook.LiveKitWebhookHandler -- track_published for TR_orphan found 0 active Share(s) for publisher 64a2a3c1-4e2b-4b00-8084-262aadc1d7c1 in room f3765e0e-58ae-4d78-ab0d-1f95c5930337, expected exactly 1, no-op
-]]></system-out>
-  </testcase>
-  <testcase name="participantLeft_recomputesTheRoom" classname="com.precued.webhook.LiveKitWebhookHandlerTest" time="0.008"/>
+  <testcase name="start_createsShareAndRecomputes_whenPublisherHoldsHostRole" classname="com.precued.service.ShareLifecycleServiceTest" time="0.089"/>
+  <testcase name="start_rejectsPublisherWithNonHostRole_andDoesNotCreateAShare" classname="com.precued.service.ShareLifecycleServiceTest" time="0.005"/>
+  <testcase name="start_rejectsPublisherWithNoActiveAssignment_andDoesNotCreateAShare" classname="com.precued.service.ShareLifecycleServiceTest" time="0.003"/>
 </testsuite>

@@ -14,6 +14,7 @@ import livekit.LivekitWebhook.WebhookEvent;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
@@ -21,6 +22,9 @@ import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -143,5 +147,70 @@ class LiveKitWebhookHandlerTest {
 
         verify(engine).recomputeAndPushForShare(share.getId());
         verify(engine, never()).recomputeAndPushForRoom(eq(roomId));
+    }
+
+    @Test
+    void trackPublished_createsShareTrack_andRecomputes_whenExactlyOneActiveShareForPublisher() {
+        givenRoomExists();
+        RoomParticipant publisher = new RoomParticipant();
+        publisher.setId(participantId);
+        when(roomParticipantRepository.findByRoomIdAndLivekitIdentity(roomId, "host-1"))
+                .thenReturn(Optional.of(publisher));
+
+        Share share = new Share();
+        share.setId(UUID.randomUUID());
+        when(shareTrackRepository.findByLivekitTrackSid("TR_video1")).thenReturn(Optional.empty());
+        when(shareRepository.findByPublisherIdAndStatus(participantId, Share.Status.ACTIVE))
+                .thenReturn(List.of(share));
+
+        WebhookEvent event = WebhookEvent.newBuilder()
+                .setEvent("track_published")
+                .setRoom(LivekitModels.Room.newBuilder().setName("room-42").build())
+                .setParticipant(LivekitModels.ParticipantInfo.newBuilder().setIdentity("host-1").build())
+                .setTrack(LivekitModels.TrackInfo.newBuilder()
+                        .setSid("TR_video1")
+                        .setType(LivekitModels.TrackType.VIDEO)
+                        .build())
+                .build();
+
+        handler.handle(event);
+
+        ArgumentCaptor<ShareTrack> captor = ArgumentCaptor.forClass(ShareTrack.class);
+        verify(shareTrackRepository).save(captor.capture());
+        ShareTrack saved = captor.getValue();
+        assertThat(saved.getShare()).isSameAs(share);
+        assertThat(saved.getLivekitTrackSid()).isEqualTo("TR_video1");
+        assertThat(saved.getKind()).isEqualTo(ShareTrack.Kind.VIDEO);
+        assertThat(saved.getPublishedAt()).isNotNull();
+
+        verify(engine).recomputeAndPushForShare(share.getId());
+    }
+
+    @Test
+    void trackPublished_noActiveShareForPublisher_logsAndNoOps_withoutThrowingOrCreatingARow() {
+        givenRoomExists();
+        RoomParticipant publisher = new RoomParticipant();
+        publisher.setId(participantId);
+        when(roomParticipantRepository.findByRoomIdAndLivekitIdentity(roomId, "host-1"))
+                .thenReturn(Optional.of(publisher));
+
+        when(shareTrackRepository.findByLivekitTrackSid("TR_orphan")).thenReturn(Optional.empty());
+        when(shareRepository.findByPublisherIdAndStatus(participantId, Share.Status.ACTIVE))
+                .thenReturn(List.of());
+
+        WebhookEvent event = WebhookEvent.newBuilder()
+                .setEvent("track_published")
+                .setRoom(LivekitModels.Room.newBuilder().setName("room-42").build())
+                .setParticipant(LivekitModels.ParticipantInfo.newBuilder().setIdentity("host-1").build())
+                .setTrack(LivekitModels.TrackInfo.newBuilder()
+                        .setSid("TR_orphan")
+                        .setType(LivekitModels.TrackType.VIDEO)
+                        .build())
+                .build();
+
+        assertThatCode(() -> handler.handle(event)).doesNotThrowAnyException();
+
+        verify(shareTrackRepository, never()).save(any());
+        verify(engine, never()).recomputeAndPushForShare(any());
     }
 }
