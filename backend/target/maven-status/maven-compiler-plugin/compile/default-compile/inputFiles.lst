@@ -1,4 +1,5 @@
 /home/user/Precued/backend/src/main/java/com/precued/PrecuedApplication.java
+/home/user/Precued/backend/src/main/java/com/precued/config/LiveKitConfig.java
 /home/user/Precued/backend/src/main/java/com/precued/engine/ParticipantTrackPermission.java
 /home/user/Precued/backend/src/main/java/com/precued/engine/VisibilityEngine.java
 /home/user/Precued/backend/src/main/java/com/precued/engine/VisibilityEngineImpl.java
@@ -28,3 +29,8 @@
 /home/user/Precued/backend/src/main/java/com/precued/repository/TemplateRepository.java
 /home/user/Precued/backend/src/main/java/com/precued/repository/TemplateRoleRepository.java
 /home/user/Precued/backend/src/main/java/com/precued/repository/UserRepository.java
+/home/user/Precued/backend/src/main/java/com/precued/service/ParticipantRoleAssignmentService.java
+/home/user/Precued/backend/src/main/java/com/precued/service/ShareLifecycleService.java
+/home/user/Precued/backend/src/main/java/com/precued/service/ShareRoleGrantService.java
+/home/user/Precued/backend/src/main/java/com/precued/webhook/LiveKitWebhookController.java
+/home/user/Precued/backend/src/main/java/com/precued/webhook/LiveKitWebhookHandler.java
