@@ -59,7 +59,9 @@ class RoomControllerTest {
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.id").value(roomId.toString()))
                 .andExpect(jsonPath("$.templateId").value("mock_trial"))
-                .andExpect(jsonPath("$.status").value("CREATED"));
+                .andExpect(jsonPath("$.status").value("CREATED"))
+                .andExpect(jsonPath("$.livekitRoomName").value("room-" + roomId))
+                .andExpect(jsonPath("$.livekitRoomName").isNotEmpty());
     }
 
     @Test

@@ -33,10 +33,11 @@ class RoomParticipantControllerTest {
 
         Room room = new Room();
         room.setId(roomId);
+        String livekitIdentity = UUID.randomUUID().toString();
         RoomParticipant participant = new RoomParticipant();
         participant.setId(participantId);
         participant.setRoom(room);
-        participant.setLivekitIdentity(UUID.randomUUID().toString());
+        participant.setLivekitIdentity(livekitIdentity);
         participant.setDisplayName("Guest Client");
         participant.setJoinedAt(Instant.now());
 
@@ -51,7 +52,9 @@ class RoomParticipantControllerTest {
                 .andExpect(jsonPath("$.id").value(participantId.toString()))
                 .andExpect(jsonPath("$.roomId").value(roomId.toString()))
                 .andExpect(jsonPath("$.userId").doesNotExist())
-                .andExpect(jsonPath("$.accessLevel").value("MEMBER"));
+                .andExpect(jsonPath("$.accessLevel").value("MEMBER"))
+                .andExpect(jsonPath("$.livekitIdentity").value(livekitIdentity))
+                .andExpect(jsonPath("$.livekitIdentity").isNotEmpty());
     }
 
     @Test
