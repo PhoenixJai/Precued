@@ -1,57 +1,87 @@
 package com.precued.engine;
 
+import java.util.List;
 import java.util.UUID;
 
 /**
- * Runtime Rule (from Precued_DataModel.md):
+ * Compiles the ShareRoleGrant allow-list (Runtime Rule, Precued_DataModel.md)
+ * into live LiveKit track-subscription permissions.
  *
- * A RoomParticipant receives a Share's tracks IFF their currently active
- * ParticipantRoleAssignment points to a RoomRole that has an active
- * ShareRoleGrant for that Share.
+ * This is NOT a pure backend service — see "VisibilityEngine — Interface
+ * Spec" in Precued_DataModel.md for the full rationale. In short: LiveKit's
+ * server SDK (RoomServiceClient.updateParticipant) only exposes a coarse,
+ * room-wide canSubscribe toggle per participant — it cannot express
+ * "participant X may see track Y but not track Z". Fine-grained per-track,
+ * per-viewer permission only exists via
+ * LocalParticipant.setTrackSubscriptionPermissions(...), which is a
+ * CLIENT-SIDE call made by the publisher's own client, not something our
+ * backend can invoke directly against LiveKit.
  *
- * This is re-evaluated and recompiled into live LiveKit track-subscription
- * permissions whenever any of the following change:
- *   1. A ParticipantRoleAssignment is created or revoked (role reassignment)
- *   2. A ShareRoleGrant is created or revoked (host changes visibility)
- *   3. A participant's connection state changes (join/leave/reconnect)
+ * The engine is therefore split into two parts:
  *
- * No grant row = never subscribed — this must be enforced server-side via
- * LiveKit's track subscription permissions (io.livekit TrackSubscriptionPermission
- * / participant permission update), NOT by hiding tracks client-side. A
- * client-side hide is not a privacy guarantee; an unsubscribed track that
- * was never sent is.
+ * Part A — {@link #computeGrantsForShare}: pure backend compute, DB-only,
+ * no LiveKit call. Reads Share -> Room -> connected RoomParticipants ->
+ * each participant's active ParticipantRoleAssignment -> active
+ * ShareRoleGrants for the share -> the share's ShareTracks, and joins them
+ * per the Runtime Rule. Idempotent and safe to call as often as needed.
  *
- * M1 implementation notes:
- * - recompileForRoom() should be called from three triggers: role assignment
- *   service, share-grant service, and LiveKit webhook handlers (participant
- *   connected/disconnected).
- * - Each recompile should be idempotent and diff-based against current LiveKit
- *   state where possible, to avoid unnecessary permission-update calls under
- *   load (e.g. many rapid grant toggles in Mock Trial's Judge + Jury preset
- *   switching).
- * - Debounce recompiles that land within the same event tick (e.g. applying
- *   a preset creates/revokes several ShareRoleGrant rows at once — one
- *   recompile per preset application, not one per row).
+ * Part B — {@link #pushGrantsToPublisher}: sends Part A's output to the
+ * Share's publisher_participant_id's client over our own channel (LiveKit
+ * data message or existing websocket — not a new external dependency). The
+ * publisher's client is the one that actually calls
+ * setTrackSubscriptionPermissions(false, ...) against LiveKit; our backend's
+ * responsibility ends at the push. If that client is disconnected,
+ * backgrounded, or slow, the permission change does not take effect until
+ * it reconnects/resumes — a real dependency, not an edge case to hand-wave.
+ *
+ * Triggers (event-driven, never poll or recompute-on-read):
+ *   - ParticipantRoleAssignment created/revoked -> every active Share in the room
+ *   - ShareRoleGrant created/revoked             -> that one Share
+ *   - Share started                              -> that one Share
+ *   - Share ended                                -> none (tracks unpublished, permissions moot)
+ *   - LiveKit webhook participant_joined/left    -> every active Share in the room
+ *   - LiveKit webhook track_published            -> the Share that track belongs to
+ *
+ * Failure/race handling is fail-closed per participant, not per room: a
+ * RoomParticipant with no currently active ParticipantRoleAssignment (e.g.
+ * the gap between a revoke and the next assign) is treated as allowed=false
+ * for every Share, without touching any other participant's permissions.
+ * This requires reassignment to be implemented as two writes — revoke, then
+ * assign — with Part A+B re-run after each, not one atomic swap.
  */
 public interface VisibilityEngine {
 
     /**
-     * Recompute and push live LiveKit track-subscription permissions for
-     * every connected participant in a room, based on current
-     * ParticipantRoleAssignment + ShareRoleGrant state.
+     * Part A. Pure function of current DB state for one Share: no LiveKit
+     * call, no side effects. Returns one entry per connected RoomParticipant
+     * in the Share's room, with {@code allowed} true iff their currently
+     * active RoomRole has an active ShareRoleGrant for this share.
      */
-    void recompileForRoom(UUID roomId);
+    List<ParticipantTrackPermission> computeGrantsForShare(UUID shareId);
 
     /**
-     * Narrower recompile scoped to a single Share — use when only that
-     * Share's grants changed (host tagged/untagged roles), to avoid a
-     * full-room recompile.
+     * Part B. Sends a computed permission list to the Share's publisher's
+     * client over our own channel. Does not call LiveKit itself — the
+     * publisher's client SDK is what calls
+     * setTrackSubscriptionPermissions(false, ...) on receipt. Returns once
+     * the push is handed off; delivery and application are the publisher
+     * client's responsibility.
      */
-    void recompileForShare(UUID shareId);
+    void pushGrantsToPublisher(UUID shareId, List<ParticipantTrackPermission> grants);
 
     /**
-     * Narrower recompile scoped to a single participant — use when only
-     * their role assignment changed (host reassigned them mid-call).
+     * Runs Part A then Part B for a single Share. Use for triggers scoped
+     * to one share: ShareRoleGrant created/revoked, Share started, or a
+     * ShareTrack published under it.
      */
-    void recompileForParticipant(UUID roomParticipantId);
+    default void recomputeAndPushForShare(UUID shareId) {
+        pushGrantsToPublisher(shareId, computeGrantsForShare(shareId));
+    }
+
+    /**
+     * Runs Part A+B for every active Share in a room. Use for triggers
+     * scoped to the whole room: a ParticipantRoleAssignment change, or a
+     * LiveKit participant_joined/participant_left webhook.
+     */
+    void recomputeAndPushForRoom(UUID roomId);
 }
