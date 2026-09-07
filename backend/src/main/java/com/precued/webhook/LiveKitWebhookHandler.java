@@ -101,7 +101,21 @@ public class LiveKitWebhookHandler {
         }
 
         UUID roomId = resolveRoomId(event.getRoom().getName());
-        UUID publisherId = resolveParticipantId(roomId, event.getParticipant().getIdentity());
+        RoomParticipant publisher = resolveParticipant(roomId, event.getParticipant().getIdentity());
+
+        // LiveKit queues webhook events per resource (track, participant, room,
+        // ...) specifically so one resource's events never block another's —
+        // there is no cross-resource ordering guarantee. A track_published for
+        // this participant's track can arrive after we've already processed
+        // their participant_left and set leftAt. Treat that as stale, not as
+        // a valid publish.
+        if (publisher.getLeftAt() != null) {
+            log.warn(
+                    "track_published for {} arrived after publisher {} had already left (leftAt set), no-op",
+                    trackSid, publisher.getId());
+            return;
+        }
+        UUID publisherId = publisher.getId();
 
         // The publisher's client tags the track's `name` as "<shareId>:<label>"
         // at publish time (client-side contract — see ShareLifecycleService).
@@ -176,8 +190,11 @@ public class LiveKitWebhookHandler {
     }
 
     private UUID resolveParticipantId(UUID roomId, String livekitIdentity) {
+        return resolveParticipant(roomId, livekitIdentity).getId();
+    }
+
+    private RoomParticipant resolveParticipant(UUID roomId, String livekitIdentity) {
         return roomParticipantRepository.findByRoomIdAndLivekitIdentity(roomId, livekitIdentity)
-                .map(RoomParticipant::getId)
                 .orElseThrow(() -> new IllegalStateException("Unknown participant: " + livekitIdentity));
     }
 }

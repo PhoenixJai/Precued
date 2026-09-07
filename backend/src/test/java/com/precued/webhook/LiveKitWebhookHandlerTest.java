@@ -180,6 +180,29 @@ class LiveKitWebhookHandlerTest {
     }
 
     @Test
+    void trackPublished_publisherAlreadyLeft_logsAndNoOps_withoutLookingUpTheShare() {
+        // LiveKit queues webhook events per resource (track vs. participant),
+        // with no cross-resource ordering guarantee: track_published for this
+        // participant's track can arrive after participant_left already set
+        // leftAt. That must be treated as stale, not as a valid publish.
+        givenRoomExists();
+        RoomParticipant publisher = new RoomParticipant();
+        publisher.setId(participantId);
+        publisher.setLeftAt(java.time.Instant.now());
+        when(roomParticipantRepository.findByRoomIdAndLivekitIdentity(roomId, "host-1"))
+                .thenReturn(Optional.of(publisher));
+        when(shareTrackRepository.findByLivekitTrackSid("TR_stale")).thenReturn(Optional.empty());
+
+        WebhookEvent event = trackPublishedEvent("TR_stale", UUID.randomUUID() + ":Exhibit A", "host-1");
+
+        assertThatCode(() -> handler.handle(event)).doesNotThrowAnyException();
+
+        verify(shareRepository, never()).findById(any());
+        verify(shareTrackRepository, never()).save(any());
+        verify(engine, never()).recomputeAndPushForShare(any());
+    }
+
+    @Test
     void trackPublished_nameWithNoDelimiter_logsAndNoOps() {
         givenRoomExists();
         RoomParticipant publisher = new RoomParticipant();
