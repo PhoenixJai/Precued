@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<testsuite xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="https://maven.apache.org/surefire/maven-surefire-plugin/xsd/surefire-test-report-3.0.xsd" version="3.0" name="com.precued.controller.RoomParticipantControllerTest" time="0.252" tests="3" errors="0" skipped="0" failures="0">
+<testsuite xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="https://maven.apache.org/surefire/maven-surefire-plugin/xsd/surefire-test-report-3.0.xsd" version="3.0" name="com.precued.service.ParticipantRoleAssignmentServiceTest" time="0.064" tests="3" errors="0" skipped="0" failures="0">
   <properties>
     <property name="java.specification.version" value="21"/>
     <property name="sun.jnu.encoding" value="ANSI_X3.4-1968"/>
@@ -10,7 +10,6 @@
     <property name="sun.arch.data.model" value="64"/>
     <property name="java.vendor.url" value="https://ubuntu.com/"/>
     <property name="user.timezone" value="Etc/UTC"/>
-    <property name="org.jboss.logging.provider" value="slf4j"/>
     <property name="os.name" value="Linux"/>
     <property name="java.vm.specification.version" value="21"/>
     <property name="sun.java.launcher" value="SUN_STANDARD"/>
@@ -34,9 +33,7 @@
     <property name="line.separator" value="&#10;"/>
     <property name="java.vm.specification.vendor" value="Oracle Corporation"/>
     <property name="java.specification.name" value="Java Platform API Specification"/>
-    <property name="FILE_LOG_CHARSET" value="UTF-8"/>
     <property name="jdk.http.auth.proxying.disabledSchemes" value=""/>
-    <property name="java.awt.headless" value="true"/>
     <property name="surefire.real.class.path" value="/home/user/Precued/backend/target/surefire/surefirebooter-20260907205705374_3.jar"/>
     <property name="javax.net.ssl.trustStore" value="/root/.ccr/java-truststore.p12"/>
     <property name="sun.management.compiler" value="HotSpot 64-Bit Tiered Compilers"/>
@@ -56,8 +53,6 @@
     <property name="user.dir" value="/home/user/Precued/backend"/>
     <property name="os.arch" value="amd64"/>
     <property name="java.vm.specification.name" value="Java Virtual Machine Specification"/>
-    <property name="PID" value="1784"/>
-    <property name="CONSOLE_LOG_CHARSET" value="UTF-8"/>
     <property name="native.encoding" value="ANSI_X3.4-1968"/>
     <property name="java.library.path" value="/usr/java/packages/lib:/usr/lib/x86_64-linux-gnu/jni:/lib/x86_64-linux-gnu:/usr/lib/x86_64-linux-gnu:/usr/lib/jni:/lib:/usr/lib"/>
     <property name="java.vm.info" value="mixed mode, sharing"/>
@@ -66,29 +61,8 @@
     <property name="java.vm.version" value="21.0.10+7-Ubuntu-124.04"/>
     <property name="sun.io.unicode.encoding" value="UnicodeLittle"/>
     <property name="java.class.version" value="65.0"/>
-    <property name="LOGGED_APPLICATION_NAME" value="[precued-backend] "/>
   </properties>
-  <testcase name="join_unknownRoom_returns404" classname="com.precued.controller.RoomParticipantControllerTest" time="0.02">
-    <system-out><![CDATA[2026-09-07T20:57:12.679Z  INFO 1784 --- [precued-backend] [           main] t.c.s.AnnotationConfigContextLoaderUtils : Could not detect default configuration classes for test class [com.precued.controller.RoomParticipantControllerTest]: RoomParticipantControllerTest does not declare any static, non-private, non-final, nested classes annotated with @Configuration.
-2026-09-07T20:57:12.685Z  INFO 1784 --- [precued-backend] [           main] .b.t.c.SpringBootTestContextBootstrapper : Found @SpringBootConfiguration com.precued.PrecuedApplication for test class com.precued.controller.RoomParticipantControllerTest
-
-  .   ____          _            __ _ _
- /\\ / ___'_ __ _ _(_)_ __  __ _ \ \ \ \
-( ( )\___ | '_ | '_| | '_ \/ _` | \ \ \ \
- \\/  ___)| |_)| | | | | || (_| |  ) ) ) )
-  '  |____| .__|_| |_|_| |_\__, | / / / /
- =========|_|==============|___/=/_/_/_/
-
- :: Spring Boot ::                (v3.3.4)
-
-2026-09-07T20:57:12.699Z  INFO 1784 --- [precued-backend] [           main] c.p.c.RoomParticipantControllerTest      : Starting RoomParticipantControllerTest using Java 21.0.10 with PID 1784 (started by root in /home/user/Precued/backend)
-2026-09-07T20:57:12.700Z  INFO 1784 --- [precued-backend] [           main] c.p.c.RoomParticipantControllerTest      : No active profile set, falling back to 1 default profile: "default"
-2026-09-07T20:57:12.879Z  INFO 1784 --- [precued-backend] [           main] o.s.b.t.m.w.SpringBootMockServletContext : Initializing Spring TestDispatcherServlet ''
-2026-09-07T20:57:12.879Z  INFO 1784 --- [precued-backend] [           main] o.s.t.web.servlet.TestDispatcherServlet  : Initializing Servlet ''
-2026-09-07T20:57:12.880Z  INFO 1784 --- [precued-backend] [           main] o.s.t.web.servlet.TestDispatcherServlet  : Completed initialization in 1 ms
-2026-09-07T20:57:12.886Z  INFO 1784 --- [precued-backend] [           main] c.p.c.RoomParticipantControllerTest      : Started RoomParticipantControllerTest in 0.199 seconds (process running for 7.455)
-]]></system-out>
-  </testcase>
-  <testcase name="join_missingDisplayName_returns400" classname="com.precued.controller.RoomParticipantControllerTest" time="0.006"/>
-  <testcase name="join_guestNoUserId_returns201" classname="com.precued.controller.RoomParticipantControllerTest" time="0.009"/>
+  <testcase name="assign_nonHostRoleWithoutLinkedUser_stillSucceeds_guestJoinUnaffected" classname="com.precued.service.ParticipantRoleAssignmentServiceTest" time="0.056"/>
+  <testcase name="assign_hostRoleWithoutLinkedUser_rejectsAndDoesNotCreateAssignment" classname="com.precued.service.ParticipantRoleAssignmentServiceTest" time="0.002"/>
+  <testcase name="assign_hostRoleWithLinkedUser_succeeds" classname="com.precued.service.ParticipantRoleAssignmentServiceTest" time="0.003"/>
 </testsuite>
