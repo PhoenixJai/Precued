@@ -4,12 +4,15 @@ import com.precued.engine.VisibilityEngine;
 import com.precued.entity.ParticipantRoleAssignment;
 import com.precued.entity.RoomParticipant;
 import com.precued.entity.Share;
+import com.precued.entity.ShareTrack;
 import com.precued.entity.TemplatePreset;
 import com.precued.repository.ParticipantRoleAssignmentRepository;
 import com.precued.repository.RoomParticipantRepository;
 import com.precued.repository.ShareRepository;
+import com.precued.repository.ShareTrackRepository;
 import com.precued.repository.TemplatePresetRepository;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
 import java.util.UUID;
@@ -26,6 +29,7 @@ import java.util.UUID;
 public class ShareLifecycleService {
 
     private final ShareRepository shareRepository;
+    private final ShareTrackRepository shareTrackRepository;
     private final RoomParticipantRepository roomParticipantRepository;
     private final ParticipantRoleAssignmentRepository assignmentRepository;
     private final TemplatePresetRepository templatePresetRepository;
@@ -33,11 +37,13 @@ public class ShareLifecycleService {
 
     public ShareLifecycleService(
             ShareRepository shareRepository,
+            ShareTrackRepository shareTrackRepository,
             RoomParticipantRepository roomParticipantRepository,
             ParticipantRoleAssignmentRepository assignmentRepository,
             TemplatePresetRepository templatePresetRepository,
             VisibilityEngine engine) {
         this.shareRepository = shareRepository;
+        this.shareTrackRepository = shareTrackRepository;
         this.roomParticipantRepository = roomParticipantRepository;
         this.assignmentRepository = assignmentRepository;
         this.templatePresetRepository = templatePresetRepository;
@@ -87,6 +93,33 @@ public class ShareLifecycleService {
 
         Share saved = shareRepository.save(share);
         engine.recomputeAndPushForShare(saved.getId());
+        return saved;
+    }
+
+    /**
+     * Ends a Share and unpublishes every one of its ShareTrack rows — same
+     * outcome the MVP rule describes for a publisher disconnecting, just
+     * triggered explicitly here instead. No VisibilityEngine call: per the
+     * trigger table, "Share ended" recomputes nothing (tracks unpublished,
+     * permissions moot).
+     */
+    @Transactional
+    public Share end(UUID shareId) {
+        Share share = shareRepository.findById(shareId)
+                .orElseThrow(() -> new IllegalArgumentException("No Share with id " + shareId));
+
+        Instant endedAt = Instant.now();
+        share.setStatus(Share.Status.ENDED);
+        share.setEndedAt(endedAt);
+        Share saved = shareRepository.save(share);
+
+        for (ShareTrack track : shareTrackRepository.findByShareId(shareId)) {
+            if (track.getUnpublishedAt() == null) {
+                track.setUnpublishedAt(endedAt);
+                shareTrackRepository.save(track);
+            }
+        }
+
         return saved;
     }
 }

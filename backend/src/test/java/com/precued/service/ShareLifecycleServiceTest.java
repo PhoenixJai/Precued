@@ -6,9 +6,11 @@ import com.precued.entity.Room;
 import com.precued.entity.RoomParticipant;
 import com.precued.entity.RoomRole;
 import com.precued.entity.Share;
+import com.precued.entity.ShareTrack;
 import com.precued.repository.ParticipantRoleAssignmentRepository;
 import com.precued.repository.RoomParticipantRepository;
 import com.precued.repository.ShareRepository;
+import com.precued.repository.ShareTrackRepository;
 import com.precued.repository.TemplatePresetRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -16,6 +18,8 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import java.time.Instant;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -38,6 +42,7 @@ import static org.mockito.Mockito.when;
 class ShareLifecycleServiceTest {
 
     @Mock private ShareRepository shareRepository;
+    @Mock private ShareTrackRepository shareTrackRepository;
     @Mock private RoomParticipantRepository roomParticipantRepository;
     @Mock private ParticipantRoleAssignmentRepository assignmentRepository;
     @Mock private TemplatePresetRepository templatePresetRepository;
@@ -51,7 +56,12 @@ class ShareLifecycleServiceTest {
     @BeforeEach
     void setUp() {
         service = new ShareLifecycleService(
-                shareRepository, roomParticipantRepository, assignmentRepository, templatePresetRepository, engine);
+                shareRepository,
+                shareTrackRepository,
+                roomParticipantRepository,
+                assignmentRepository,
+                templatePresetRepository,
+                engine);
     }
 
     private RoomParticipant givenPublisherInRoom() {
@@ -125,5 +135,31 @@ class ShareLifecycleServiceTest {
 
         verify(shareRepository, never()).save(any());
         verify(engine, never()).recomputeAndPushForShare(any());
+    }
+
+    @Test
+    void end_setsEndedStatusAndUnpublishesEveryTrack_withNoEngineCall() {
+        UUID shareId = UUID.randomUUID();
+        Share share = new Share();
+        share.setId(shareId);
+        share.setStatus(Share.Status.ACTIVE);
+        when(shareRepository.findById(shareId)).thenReturn(Optional.of(share));
+        when(shareRepository.save(any(Share.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        ShareTrack videoTrack = new ShareTrack();
+        ShareTrack alreadyUnpublished = new ShareTrack();
+        alreadyUnpublished.setUnpublishedAt(Instant.now().minusSeconds(60));
+        when(shareTrackRepository.findByShareId(shareId)).thenReturn(List.of(videoTrack, alreadyUnpublished));
+
+        Share result = service.end(shareId);
+
+        assertThat(result.getStatus()).isEqualTo(Share.Status.ENDED);
+        assertThat(result.getEndedAt()).isNotNull();
+        assertThat(videoTrack.getUnpublishedAt()).isNotNull();
+        verify(shareTrackRepository).save(videoTrack);
+        // Already-unpublished track is left untouched, not re-saved with a new timestamp.
+        verify(shareTrackRepository, never()).save(alreadyUnpublished);
+        verify(engine, never()).recomputeAndPushForShare(any());
+        verify(engine, never()).recomputeAndPushForRoom(any());
     }
 }

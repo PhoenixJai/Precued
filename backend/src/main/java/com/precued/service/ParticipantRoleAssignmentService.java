@@ -58,13 +58,26 @@ public class ParticipantRoleAssignmentService {
         return saved;
     }
 
-    /** Creates a new active assignment, then recomputes every active Share in the room. */
+    /**
+     * Creates a new active assignment, then recomputes every active Share in
+     * the room. Rejects assigning a host role to a participant with no
+     * linked User — magic-link auth is required for host-role participants
+     * (Issue #1, resolved), so RoomParticipant.user_id must already be
+     * populated by the time this is called; this never creates a User
+     * itself.
+     */
     public ParticipantRoleAssignment assign(UUID roomParticipantId, UUID roomRoleId) {
         RoomParticipant participant = roomParticipantRepository.findById(roomParticipantId)
                 .orElseThrow(() -> new IllegalArgumentException(
                         "No RoomParticipant with id " + roomParticipantId));
         RoomRole role = roomRoleRepository.findById(roomRoleId)
                 .orElseThrow(() -> new IllegalArgumentException("No RoomRole with id " + roomRoleId));
+
+        if (role.isHostRole() && participant.getUser() == null) {
+            throw new IllegalStateException(
+                    "RoomParticipant " + roomParticipantId
+                            + " has no linked User and cannot be assigned a host role");
+        }
 
         ParticipantRoleAssignment assignment = new ParticipantRoleAssignment();
         assignment.setRoomParticipant(participant);
