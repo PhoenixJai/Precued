@@ -183,6 +183,80 @@ class VisibilityEngineImplPushTest {
                 any(), any(), anyString());
     }
 
+    @Test
+    void recomputeAndPushForRoom_isolatesFailurePerShare_continuesToOtherShares() throws IOException {
+        Room room = new Room();
+        room.setId(roomId);
+        room.setLivekitRoomName("room-42");
+
+        RoomParticipant publisherA = new RoomParticipant();
+        publisherA.setId(UUID.randomUUID());
+        publisherA.setLivekitIdentity("host-A");
+
+        RoomParticipant publisherB = new RoomParticipant();
+        publisherB.setId(UUID.randomUUID());
+        publisherB.setLivekitIdentity("host-B");
+
+        Share shareA = new Share();
+        shareA.setId(UUID.randomUUID());
+        shareA.setRoom(room);
+        shareA.setPublisher(publisherA);
+
+        Share shareB = new Share();
+        shareB.setId(UUID.randomUUID());
+        shareB.setRoom(room);
+        shareB.setPublisher(publisherB);
+
+        when(shareRepository.findByRoomIdAndStatus(roomId, Share.Status.ACTIVE))
+                .thenReturn(List.of(shareA, shareB));
+        when(shareRepository.findById(shareA.getId())).thenReturn(java.util.Optional.of(shareA));
+        when(shareRepository.findById(shareB.getId())).thenReturn(java.util.Optional.of(shareB));
+        when(shareTrackRepository.findByShareId(any())).thenReturn(List.of());
+        when(roomParticipantRepository.findByRoomId(roomId)).thenReturn(List.of());
+
+        // shareA's publisher push fails outright (simulated network error) ...
+        Call<Void> failingCall = mock(Call.class);
+        when(failingCall.execute()).thenThrow(new IOException("network blip"));
+        when(roomServiceClient.sendData(
+                anyString(),
+                any(byte[].class),
+                any(LivekitModels.DataPacket.Kind.class),
+                any(),
+                eq(List.of("host-A")),
+                anyString()))
+                .thenReturn(failingCall);
+
+        // ... but shareB's publisher push must still be attempted and succeed.
+        Call<Void> successCall = mock(Call.class);
+        when(successCall.execute()).thenReturn(Response.success(null));
+        when(roomServiceClient.sendData(
+                anyString(),
+                any(byte[].class),
+                any(LivekitModels.DataPacket.Kind.class),
+                any(),
+                eq(List.of("host-B")),
+                anyString()))
+                .thenReturn(successCall);
+
+        // Must not throw: shareA's failure is isolated, not propagated.
+        engine.recomputeAndPushForRoom(roomId);
+
+        verify(roomServiceClient).sendData(
+                eq("room-42"),
+                any(byte[].class),
+                eq(LivekitModels.DataPacket.Kind.RELIABLE),
+                any(),
+                eq(List.of("host-A")),
+                anyString());
+        verify(roomServiceClient).sendData(
+                eq("room-42"),
+                any(byte[].class),
+                eq(LivekitModels.DataPacket.Kind.RELIABLE),
+                any(),
+                eq(List.of("host-B")),
+                anyString());
+    }
+
     @SuppressWarnings("unchecked")
     private void stubSuccessfulSend() throws IOException {
         Call<Void> call = mock(Call.class);
