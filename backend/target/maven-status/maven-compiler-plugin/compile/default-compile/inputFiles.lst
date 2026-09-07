@@ -1,0 +1,17 @@
+/home/user/Precued/backend/src/main/java/com/precued/PrecuedApplication.java
+/home/user/Precued/backend/src/main/java/com/precued/engine/ParticipantTrackPermission.java
+/home/user/Precued/backend/src/main/java/com/precued/engine/VisibilityEngine.java
+/home/user/Precued/backend/src/main/java/com/precued/entity/Invite.java
+/home/user/Precued/backend/src/main/java/com/precued/entity/ParticipantRoleAssignment.java
+/home/user/Precued/backend/src/main/java/com/precued/entity/Room.java
+/home/user/Precued/backend/src/main/java/com/precued/entity/RoomParticipant.java
+/home/user/Precued/backend/src/main/java/com/precued/entity/RoomRole.java
+/home/user/Precued/backend/src/main/java/com/precued/entity/Share.java
+/home/user/Precued/backend/src/main/java/com/precued/entity/ShareRoleGrant.java
+/home/user/Precued/backend/src/main/java/com/precued/entity/ShareTrack.java
+/home/user/Precued/backend/src/main/java/com/precued/entity/Template.java
+/home/user/Precued/backend/src/main/java/com/precued/entity/TemplatePreset.java
+/home/user/Precued/backend/src/main/java/com/precued/entity/TemplatePresetRole.java
+/home/user/Precued/backend/src/main/java/com/precued/entity/TemplateRole.java
+/home/user/Precued/backend/src/main/java/com/precued/entity/User.java
+/home/user/Precued/backend/src/main/java/com/precued/repository/Repositories.java
