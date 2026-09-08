@@ -1,32 +1,25 @@
-// Mirrors Precued_DataModel.md. Keep in sync with backend entities under
-// com.precued.entity — if a field is added/renamed there, update here too.
-
 export type TemplateId = "sales_call" | "mock_trial" | "ld_debate";
 
-export interface TemplateRole {
-  id: string;
-  templateId: TemplateId;
-  roleKey: string;
-  name: string;
-  isHostRole: boolean;
-  isGuestRole: boolean;
-  maxMembers: number | null;
-  sortOrder: number;
-}
-
-export interface TemplatePreset {
-  id: string;
-  templateId: TemplateId;
-  name: string;
-  sortOrder: number;
-  roleIds: string[]; // resolved from TemplatePresetRole join
-}
-
-export type RoomStatus = "CREATED" | "ACTIVE" | "ENDED";
 export type HostDisconnectPolicy =
   | "END_CALL"
   | "PERSIST_INDEFINITELY"
   | "PERSIST_FOR_DURATION";
+
+export type RoomStatus = "CREATED" | "ACTIVE" | "ENDED";
+export type AccessLevel = "HOST" | "MEMBER";
+export type ShareStatus = "ACTIVE" | "ENDED";
+
+export interface MagicLinkResponse {
+  token: string;
+  expiresAt: string;
+}
+
+export interface SessionResponse {
+  sessionToken: string;
+  userId: string;
+  email: string;
+  expiresAt: string;
+}
 
 export interface Room {
   id: string;
@@ -35,52 +28,49 @@ export interface Room {
   livekitRoomName: string;
   status: RoomStatus;
   hostDisconnectPolicy: HostDisconnectPolicy;
-  hostDisconnectGraceSeconds: number | null;
   createdAt: string;
-  endedAt: string | null;
 }
 
 export interface RoomRole {
   id: string;
   roomId: string;
-  sourceTemplateRoleId: string | null;
   roleKey: string;
   name: string;
   isHostRole: boolean;
   maxMembers: number | null;
 }
 
-export type InviteMode = "NAMED" | "POOL";
-export type InviteStatus = "PENDING" | "USED" | "EXPIRED";
-
-export interface Invite {
-  id: string;
-  roomRoleId: string;
-  inviteeEmail: string | null;
-  token: string;
-  maxUses: number;
-  usesCount: number;
-  status: InviteStatus;
-  mode: InviteMode;
-  createdAt: string;
-  expiresAt: string | null;
-}
-
-export type AccessLevel = "HOST" | "MEMBER";
-
 export interface RoomParticipant {
   id: string;
   roomId: string;
-  userId: string | null; // null = guest
+  userId: string | null;
   livekitIdentity: string;
   displayName: string;
   accessLevel: AccessLevel;
   joinedAt: string;
-  leftAt: string | null;
-  currentRoomRoleId: string | null; // resolved from active ParticipantRoleAssignment
 }
 
-export type ShareStatus = "ACTIVE" | "ENDED";
+export interface RoomParticipantWithGrants extends RoomParticipant {
+  leftAt: string | null;
+  activeRoomRoleId: string | null;
+  activeShareRoleGrantIds: string[];
+}
+
+export interface ParticipantRoleAssignment {
+  id: string;
+  roomParticipantId: string;
+  roomRoleId: string;
+  assignedAt: string;
+  revokedAt: string | null;
+}
+
+export interface TemplatePreset {
+  id: string;
+  templateId: TemplateId;
+  name: string;
+  sortOrder: number;
+  roleKeys: string[];
+}
 
 export interface Share {
   id: string;
@@ -91,12 +81,42 @@ export interface Share {
   status: ShareStatus;
   startedAt: string;
   endedAt: string | null;
-  grantedRoomRoleIds: string[]; // resolved from active ShareRoleGrant rows
 }
 
-/** What the current participant sees for a given Share — drives the
- * "can see share" / "content not shared with your role" UI states. */
-export interface ShareVisibilityForSelf {
+export interface ActiveShare {
+  id: string;
+  label: string;
+  roomRoleIds: string[];
+}
+
+export interface ShareRoleGrant {
+  id: string;
   shareId: string;
-  visible: boolean;
+  roomRoleId: string;
+  grantedAt: string;
+  revokedAt: string | null;
+}
+
+export interface LiveKitTokenResponse {
+  token: string;
+  livekitUrl: string;
+  roomName: string;
+  identity: string;
+}
+
+export interface StoredParticipant {
+  id: string;
+  roomId: string;
+  roomRoleId: string;
+  roleKey: string;
+  roleName: string;
+  isHost: boolean;
+  displayName: string;
+  userId: string | null;
+}
+
+export interface VisibilityGrantMessage {
+  livekitIdentity: string;
+  allowed: boolean;
+  trackSids: string[];
 }
