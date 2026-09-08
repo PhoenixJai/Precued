@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import type { ReactNode } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { AppShell } from "../components/AppShell";
 import { api } from "../lib/api";
@@ -46,7 +47,6 @@ export default function RoomSetupPage() {
     };
   }, [roomId, me?.id, navigate]);
 
-  const salesRepRole = roles.find((role) => role.roleKey === "sales_rep");
   const engineerRole = roles.find((role) => role.roleKey === "sales_engineer");
   const clientRole = roles.find((role) => role.roleKey === "client");
 
@@ -152,7 +152,7 @@ export default function RoomSetupPage() {
 function RoleSetupRow(props: {
   title: string;
   description: string;
-  status: React.ReactNode;
+  status: ReactNode;
   invite?: string;
   onCopy?: () => void;
   copied?: boolean;
