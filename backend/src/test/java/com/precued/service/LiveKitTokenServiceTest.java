@@ -6,6 +6,7 @@ import com.precued.controller.dto.LiveKitTokenResponse;
 import com.precued.entity.Room;
 import com.precued.entity.RoomParticipant;
 import com.precued.repository.RoomParticipantRepository;
+import com.precued.repository.RoomRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -31,6 +32,7 @@ import static org.mockito.Mockito.when;
 class LiveKitTokenServiceTest {
 
     @Mock private RoomParticipantRepository roomParticipantRepository;
+    @Mock private RoomRepository roomRepository;
 
     private final ObjectMapper objectMapper = new ObjectMapper();
     private LiveKitTokenService service;
@@ -40,7 +42,8 @@ class LiveKitTokenServiceTest {
     @BeforeEach
     void setUp() {
         service = new LiveKitTokenService(
-                roomParticipantRepository, "test-api-key", "test-api-secret-must-be-32-bytes!!", "wss://precued.livekit.cloud");
+                roomParticipantRepository, roomRepository, "test-api-key",
+                "test-api-secret-must-be-32-bytes!!", "wss://precued.livekit.cloud");
     }
 
     @Test
@@ -55,6 +58,7 @@ class LiveKitTokenServiceTest {
         participant.setLivekitIdentity("identity-1");
         participant.setDisplayName("Jordan");
         when(roomParticipantRepository.findById(participantId)).thenReturn(Optional.of(participant));
+        when(roomRepository.findById(room.getId())).thenReturn(Optional.of(room));
 
         LiveKitTokenResponse response = service.issueToken(participantId);
 

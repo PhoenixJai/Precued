@@ -86,6 +86,17 @@
             <artifactId>spring-boot-starter-test</artifactId>
             <scope>test</scope>
         </dependency>
+
+        <!-- In-memory DB for JPA integration tests that need real Hibernate
+             lazy-loading/session behavior (Mockito mocks can't reproduce
+             LazyInitializationException) — production still runs on
+             Postgres, this is test-only, schema built from @Entity mappings
+             (see LiveKitTokenIntegrationTest and its application-integrationtest.yml). -->
+        <dependency>
+            <groupId>com.h2database</groupId>
+            <artifactId>h2</artifactId>
+            <scope>test</scope>
+        </dependency>
     </dependencies>
 
     <build>

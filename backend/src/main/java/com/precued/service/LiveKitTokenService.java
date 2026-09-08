@@ -1,8 +1,10 @@
 package com.precued.service;
 
 import com.precued.controller.dto.LiveKitTokenResponse;
+import com.precued.entity.Room;
 import com.precued.entity.RoomParticipant;
 import com.precued.repository.RoomParticipantRepository;
+import com.precued.repository.RoomRepository;
 import io.livekit.server.AccessToken;
 import io.livekit.server.CanPublish;
 import io.livekit.server.CanPublishData;
@@ -27,16 +29,19 @@ import java.util.UUID;
 public class LiveKitTokenService {
 
     private final RoomParticipantRepository roomParticipantRepository;
+    private final RoomRepository roomRepository;
     private final String apiKey;
     private final String apiSecret;
     private final String livekitUrl;
 
     public LiveKitTokenService(
             RoomParticipantRepository roomParticipantRepository,
+            RoomRepository roomRepository,
             @Value("${precued.livekit.api-key}") String apiKey,
             @Value("${precued.livekit.api-secret}") String apiSecret,
             @Value("${precued.livekit.host}") String livekitUrl) {
         this.roomParticipantRepository = roomParticipantRepository;
+        this.roomRepository = roomRepository;
         this.apiKey = apiKey;
         this.apiSecret = apiSecret;
         this.livekitUrl = livekitUrl;
@@ -47,7 +52,18 @@ public class LiveKitTokenService {
                 .orElseThrow(() -> new IllegalArgumentException(
                         "No RoomParticipant with id " + roomParticipantId));
 
-        String roomName = participant.getRoom().getLivekitRoomName();
+        // participant.getRoom() is a lazy proxy (its association is
+        // FetchType.LAZY, open-in-view is disabled, and this method runs
+        // outside any transaction): .getId() on it is always safe (Hibernate
+        // resolves it from the FK column, no query needed), but reading any
+        // other field throws LazyInitializationException once the repository
+        // call above's own transaction has closed. Fetch the Room fresh
+        // instead of reading fields off that proxy.
+        Room room = roomRepository.findById(participant.getRoom().getId())
+                .orElseThrow(() -> new IllegalStateException(
+                        "RoomParticipant " + roomParticipantId + " references a Room that no longer exists"));
+
+        String roomName = room.getLivekitRoomName();
         String identity = participant.getLivekitIdentity();
 
         AccessToken token = new AccessToken(apiKey, apiSecret);
