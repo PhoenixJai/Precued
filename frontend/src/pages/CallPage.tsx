@@ -2,6 +2,8 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import {
   LiveKitRoom,
+  RoomAudioRenderer,
+  StartAudio,
   VideoTrack,
   useConnectionState,
   useRoomContext,
@@ -61,6 +63,8 @@ export default function CallPage() {
       options={{ adaptiveStream: true, dynacast: true }}
     >
       <CallExperience roomId={roomId} />
+      <RoomAudioRenderer />
+      <StartAudio label="Click to allow audio playback" />
     </LiveKitRoom>
   );
 }
