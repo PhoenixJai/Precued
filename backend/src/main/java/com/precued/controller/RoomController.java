@@ -1,7 +1,10 @@
 package com.precued.controller;
 
 import com.precued.controller.dto.CreateRoomRequest;
+import com.precued.controller.dto.RoomParticipantWithGrantsResponse;
 import com.precued.controller.dto.RoomResponse;
+import com.precued.controller.dto.RoomRoleResponse;
+import com.precued.service.RoomParticipantService;
 import com.precued.service.RoomService;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
@@ -13,6 +16,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.util.List;
 import java.util.UUID;
 
 /**
@@ -26,9 +30,11 @@ import java.util.UUID;
 public class RoomController {
 
     private final RoomService roomService;
+    private final RoomParticipantService roomParticipantService;
 
-    public RoomController(RoomService roomService) {
+    public RoomController(RoomService roomService, RoomParticipantService roomParticipantService) {
         this.roomService = roomService;
+        this.roomParticipantService = roomParticipantService;
     }
 
     @PostMapping
@@ -41,5 +47,15 @@ public class RoomController {
     @GetMapping("/{id}")
     public RoomResponse get(@PathVariable UUID id) {
         return RoomResponse.from(roomService.get(id));
+    }
+
+    @GetMapping("/{roomId}/room-roles")
+    public List<RoomRoleResponse> listRoomRoles(@PathVariable UUID roomId) {
+        return roomService.listRoles(roomId).stream().map(RoomRoleResponse::from).toList();
+    }
+
+    @GetMapping("/{roomId}/room-participants")
+    public List<RoomParticipantWithGrantsResponse> listRoomParticipants(@PathVariable UUID roomId) {
+        return roomParticipantService.listWithGrants(roomId);
     }
 }

@@ -23,6 +23,7 @@ import retrofit2.Response;
 
 import java.io.IOException;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -38,7 +39,11 @@ import static org.mockito.Mockito.when;
  * Covers Part B (push to the publisher's LiveKit client) and the room-scoped
  * orchestration used by the ParticipantRoleAssignment / participant_joined /
  * participant_left rows of the trigger table (Precued_DataModel.md §
- * "VisibilityEngine — Interface Spec").
+ * "VisibilityEngine — Interface Spec"). Part B is keyed on the publisher
+ * (RoomParticipant), not on a Share — see the bug this fixes: LiveKit's
+ * client-side setTrackSubscriptionPermissions call replaces a publisher's
+ * entire permission matrix, so a push scoped to only one of a publisher's
+ * Shares would silently wipe out the others.
  */
 @ExtendWith(MockitoExtension.class)
 class VisibilityEngineImplPushTest {
@@ -70,26 +75,13 @@ class VisibilityEngineImplPushTest {
 
     @Test
     void pushGrantsToPublisher_targetsOnlyThePublisherIdentity_notRoomWide() throws IOException {
-        Room room = new Room();
-        room.setId(roomId);
-        room.setLivekitRoomName("room-42");
-
-        RoomParticipant publisher = new RoomParticipant();
-        publisher.setId(UUID.randomUUID());
-        publisher.setLivekitIdentity("host-1");
-
-        Share share = new Share();
-        share.setId(shareId);
-        share.setRoom(room);
-        share.setPublisher(publisher);
-
-        when(shareRepository.findById(shareId)).thenReturn(java.util.Optional.of(share));
+        RoomParticipant publisher = publisherIn("room-42", "host-1");
         stubSuccessfulSend();
 
         List<ParticipantTrackPermission> grants =
                 List.of(new ParticipantTrackPermission("viewer-1", true, List.of("TR_video1")));
 
-        engine.pushGrantsToPublisher(shareId, grants);
+        engine.pushGrantsToPublisher(publisher.getId(), grants);
 
         ArgumentCaptor<List<String>> destinationIdentities = ArgumentCaptor.forClass(List.class);
         ArgumentCaptor<List<String>> destinationSids = ArgumentCaptor.forClass(List.class);
@@ -107,27 +99,14 @@ class VisibilityEngineImplPushTest {
 
     @Test
     void pushGrantsToPublisher_sendsExactKindDestinationsAndSerializedPayload() throws IOException {
-        Room room = new Room();
-        room.setId(roomId);
-        room.setLivekitRoomName("room-42");
-
-        RoomParticipant publisher = new RoomParticipant();
-        publisher.setId(UUID.randomUUID());
-        publisher.setLivekitIdentity("host-1");
-
-        Share share = new Share();
-        share.setId(shareId);
-        share.setRoom(room);
-        share.setPublisher(publisher);
-
-        when(shareRepository.findById(shareId)).thenReturn(java.util.Optional.of(share));
+        RoomParticipant publisher = publisherIn("room-42", "host-1");
         stubSuccessfulSend();
 
         List<ParticipantTrackPermission> grants = List.of(
                 new ParticipantTrackPermission("viewer-1", true, List.of("TR_video1", "TR_audio1")),
                 new ParticipantTrackPermission("viewer-2", false, List.of()));
 
-        engine.pushGrantsToPublisher(shareId, grants);
+        engine.pushGrantsToPublisher(publisher.getId(), grants);
 
         ArgumentCaptor<byte[]> payload = ArgumentCaptor.forClass(byte[].class);
         ArgumentCaptor<List<String>> destinationSids = ArgumentCaptor.forClass(List.class);
@@ -149,72 +128,72 @@ class VisibilityEngineImplPushTest {
     }
 
     @Test
-    void recomputeAndPushForRoom_pushesToEveryActiveShareInTheRoom() throws IOException {
-        Room room = new Room();
-        room.setId(roomId);
-        room.setLivekitRoomName("room-42");
-
-        RoomParticipant publisher = new RoomParticipant();
-        publisher.setId(UUID.randomUUID());
-        publisher.setLivekitIdentity("host-1");
+    void recomputeAndPushForRoom_pushesOncePerDistinctPublisher_evenWithMultipleActiveSharesEach() throws IOException {
+        RoomParticipant publisher = publisherIn("room-42", "host-1");
 
         Share shareA = new Share();
         shareA.setId(UUID.randomUUID());
-        shareA.setRoom(room);
+        shareA.setRoom(publisher.getRoom());
         shareA.setPublisher(publisher);
 
         Share shareB = new Share();
         shareB.setId(UUID.randomUUID());
-        shareB.setRoom(room);
+        shareB.setRoom(publisher.getRoom());
         shareB.setPublisher(publisher);
 
         when(shareRepository.findByRoomIdAndStatus(roomId, Share.Status.ACTIVE))
                 .thenReturn(List.of(shareA, shareB));
-        when(shareRepository.findById(shareA.getId())).thenReturn(java.util.Optional.of(shareA));
-        when(shareRepository.findById(shareB.getId())).thenReturn(java.util.Optional.of(shareB));
+        when(shareRepository.findByPublisherIdAndStatus(publisher.getId(), Share.Status.ACTIVE))
+                .thenReturn(List.of(shareA, shareB));
+        when(shareRepository.findById(shareA.getId())).thenReturn(Optional.of(shareA));
+        when(shareRepository.findById(shareB.getId())).thenReturn(Optional.of(shareB));
         when(shareTrackRepository.findByShareId(any())).thenReturn(List.of());
         when(roomParticipantRepository.findByRoomId(roomId)).thenReturn(List.of());
+        when(roomParticipantRepository.findById(publisher.getId())).thenReturn(Optional.of(publisher));
+        stubNoBaseTracks("room-42", "host-1");
         stubSuccessfulSend();
 
         engine.recomputeAndPushForRoom(roomId);
 
-        verify(roomServiceClient, times(2)).sendData(
+        // Exactly one push for the shared publisher, not one per Share —
+        // this is the bug: a second push scoped only to shareB's tracks
+        // would silently replace (not add to) shareA's grants on the client.
+        verify(roomServiceClient, times(1)).sendData(
                 eq("room-42"), any(byte[].class), eq(LivekitModels.DataPacket.Kind.RELIABLE),
-                any(), any(), anyString());
+                any(), eq(List.of("host-1")), anyString());
     }
 
     @Test
-    void recomputeAndPushForRoom_isolatesFailurePerShare_continuesToOtherShares() throws IOException {
-        Room room = new Room();
-        room.setId(roomId);
-        room.setLivekitRoomName("room-42");
-
-        RoomParticipant publisherA = new RoomParticipant();
-        publisherA.setId(UUID.randomUUID());
-        publisherA.setLivekitIdentity("host-A");
-
-        RoomParticipant publisherB = new RoomParticipant();
-        publisherB.setId(UUID.randomUUID());
-        publisherB.setLivekitIdentity("host-B");
+    void recomputeAndPushForRoom_isolatesFailurePerPublisher_continuesToOtherPublishers() throws IOException {
+        RoomParticipant publisherA = publisherIn("room-42", "host-A");
+        RoomParticipant publisherB = publisherIn(publisherA.getRoom(), "host-B");
 
         Share shareA = new Share();
         shareA.setId(UUID.randomUUID());
-        shareA.setRoom(room);
+        shareA.setRoom(publisherA.getRoom());
         shareA.setPublisher(publisherA);
 
         Share shareB = new Share();
         shareB.setId(UUID.randomUUID());
-        shareB.setRoom(room);
+        shareB.setRoom(publisherA.getRoom());
         shareB.setPublisher(publisherB);
 
         when(shareRepository.findByRoomIdAndStatus(roomId, Share.Status.ACTIVE))
                 .thenReturn(List.of(shareA, shareB));
-        when(shareRepository.findById(shareA.getId())).thenReturn(java.util.Optional.of(shareA));
-        when(shareRepository.findById(shareB.getId())).thenReturn(java.util.Optional.of(shareB));
+        when(shareRepository.findByPublisherIdAndStatus(publisherA.getId(), Share.Status.ACTIVE))
+                .thenReturn(List.of(shareA));
+        when(shareRepository.findByPublisherIdAndStatus(publisherB.getId(), Share.Status.ACTIVE))
+                .thenReturn(List.of(shareB));
+        when(shareRepository.findById(shareA.getId())).thenReturn(Optional.of(shareA));
+        when(shareRepository.findById(shareB.getId())).thenReturn(Optional.of(shareB));
         when(shareTrackRepository.findByShareId(any())).thenReturn(List.of());
         when(roomParticipantRepository.findByRoomId(roomId)).thenReturn(List.of());
+        when(roomParticipantRepository.findById(publisherA.getId())).thenReturn(Optional.of(publisherA));
+        when(roomParticipantRepository.findById(publisherB.getId())).thenReturn(Optional.of(publisherB));
+        stubNoBaseTracks("room-42", "host-A");
+        stubNoBaseTracks("room-42", "host-B");
 
-        // shareA's publisher push fails outright (simulated network error) ...
+        // publisherA's push fails outright (simulated network error) ...
         Call<Void> failingCall = mock(Call.class);
         when(failingCall.execute()).thenThrow(new IOException("network blip"));
         when(roomServiceClient.sendData(
@@ -226,7 +205,7 @@ class VisibilityEngineImplPushTest {
                 anyString()))
                 .thenReturn(failingCall);
 
-        // ... but shareB's publisher push must still be attempted and succeed.
+        // ... but publisherB's push must still be attempted and succeed.
         Call<Void> successCall = mock(Call.class);
         when(successCall.execute()).thenReturn(Response.success(null));
         when(roomServiceClient.sendData(
@@ -238,7 +217,7 @@ class VisibilityEngineImplPushTest {
                 anyString()))
                 .thenReturn(successCall);
 
-        // Must not throw: shareA's failure is isolated, not propagated.
+        // Must not throw: publisherA's failure is isolated, not propagated.
         engine.recomputeAndPushForRoom(roomId);
 
         verify(roomServiceClient).sendData(
@@ -255,6 +234,30 @@ class VisibilityEngineImplPushTest {
                 any(),
                 eq(List.of("host-B")),
                 anyString());
+    }
+
+    private RoomParticipant publisherIn(String livekitRoomName, String livekitIdentity) {
+        Room room = new Room();
+        room.setId(roomId);
+        room.setLivekitRoomName(livekitRoomName);
+        return publisherIn(room, livekitIdentity);
+    }
+
+    private RoomParticipant publisherIn(Room room, String livekitIdentity) {
+        RoomParticipant publisher = new RoomParticipant();
+        publisher.setId(UUID.randomUUID());
+        publisher.setRoom(room);
+        publisher.setLivekitIdentity(livekitIdentity);
+        when(roomParticipantRepository.findById(publisher.getId())).thenReturn(Optional.of(publisher));
+        return publisher;
+    }
+
+    @SuppressWarnings("unchecked")
+    private void stubNoBaseTracks(String roomName, String identity) throws IOException {
+        Call<LivekitModels.ParticipantInfo> call = mock(Call.class);
+        when(call.execute()).thenReturn(
+                Response.success(LivekitModels.ParticipantInfo.newBuilder().setIdentity(identity).build()));
+        when(roomServiceClient.getParticipant(roomName, identity)).thenReturn(call);
     }
 
     @SuppressWarnings("unchecked")
