@@ -5,9 +5,11 @@ import com.precued.entity.RoomParticipant;
 import com.precued.entity.RoomRole;
 import com.precued.entity.Template;
 import com.precued.entity.User;
+import com.precued.controller.dto.ActiveShareResponse;
 import com.precued.controller.dto.RoomParticipantWithGrantsResponse;
 import com.precued.service.RoomParticipantService;
 import com.precued.service.RoomService;
+import com.precued.service.ShareLifecycleService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
@@ -33,6 +35,7 @@ class RoomControllerTest {
     @Autowired private MockMvc mockMvc;
     @MockBean private RoomService roomService;
     @MockBean private RoomParticipantService roomParticipantService;
+    @MockBean private ShareLifecycleService shareLifecycleService;
 
     private Room roomWithId(UUID id) {
         Template template = new Template();
@@ -158,6 +161,32 @@ class RoomControllerTest {
                 .thenThrow(new IllegalArgumentException("No Room with id " + roomId));
 
         mockMvc.perform(get("/api/rooms/{roomId}/room-participants", roomId))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void listActiveShares_existingRoom_returns200WithSharesAndRoomRoleIds() throws Exception {
+        UUID roomId = UUID.randomUUID();
+        UUID shareId = UUID.randomUUID();
+        UUID roleId = UUID.randomUUID();
+
+        ActiveShareResponse response = new ActiveShareResponse(shareId, "Exhibit A", List.of(roleId));
+        when(shareLifecycleService.listActive(roomId)).thenReturn(List.of(response));
+
+        mockMvc.perform(get("/api/rooms/{roomId}/active-shares", roomId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].id").value(shareId.toString()))
+                .andExpect(jsonPath("$[0].label").value("Exhibit A"))
+                .andExpect(jsonPath("$[0].roomRoleIds[0]").value(roleId.toString()));
+    }
+
+    @Test
+    void listActiveShares_unknownRoom_returns404() throws Exception {
+        UUID roomId = UUID.randomUUID();
+        when(shareLifecycleService.listActive(roomId))
+                .thenThrow(new IllegalArgumentException("No Room with id " + roomId));
+
+        mockMvc.perform(get("/api/rooms/{roomId}/active-shares", roomId))
                 .andExpect(status().isNotFound());
     }
 }

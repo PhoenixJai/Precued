@@ -1,11 +1,13 @@
 package com.precued.controller;
 
+import com.precued.controller.dto.ActiveShareResponse;
 import com.precued.controller.dto.CreateRoomRequest;
 import com.precued.controller.dto.RoomParticipantWithGrantsResponse;
 import com.precued.controller.dto.RoomResponse;
 import com.precued.controller.dto.RoomRoleResponse;
 import com.precued.service.RoomParticipantService;
 import com.precued.service.RoomService;
+import com.precued.service.ShareLifecycleService;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -31,10 +33,15 @@ public class RoomController {
 
     private final RoomService roomService;
     private final RoomParticipantService roomParticipantService;
+    private final ShareLifecycleService shareLifecycleService;
 
-    public RoomController(RoomService roomService, RoomParticipantService roomParticipantService) {
+    public RoomController(
+            RoomService roomService,
+            RoomParticipantService roomParticipantService,
+            ShareLifecycleService shareLifecycleService) {
         this.roomService = roomService;
         this.roomParticipantService = roomParticipantService;
+        this.shareLifecycleService = shareLifecycleService;
     }
 
     @PostMapping
@@ -57,5 +64,10 @@ public class RoomController {
     @GetMapping("/{roomId}/room-participants")
     public List<RoomParticipantWithGrantsResponse> listRoomParticipants(@PathVariable UUID roomId) {
         return roomParticipantService.listWithGrants(roomId);
+    }
+
+    @GetMapping("/{roomId}/active-shares")
+    public List<ActiveShareResponse> listActiveShares(@PathVariable UUID roomId) {
+        return shareLifecycleService.listActive(roomId);
     }
 }

@@ -1,5 +1,6 @@
 package com.precued.service;
 
+import com.precued.controller.dto.ActiveShareResponse;
 import com.precued.engine.VisibilityEngine;
 import com.precued.entity.ParticipantRoleAssignment;
 import com.precued.entity.RoomParticipant;
@@ -8,13 +9,16 @@ import com.precued.entity.ShareTrack;
 import com.precued.entity.TemplatePreset;
 import com.precued.repository.ParticipantRoleAssignmentRepository;
 import com.precued.repository.RoomParticipantRepository;
+import com.precued.repository.RoomRepository;
 import com.precued.repository.ShareRepository;
+import com.precued.repository.ShareRoleGrantRepository;
 import com.precued.repository.ShareTrackRepository;
 import com.precued.repository.TemplatePresetRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
+import java.util.List;
 import java.util.UUID;
 
 /**
@@ -31,7 +35,9 @@ public class ShareLifecycleService {
     private final ShareRepository shareRepository;
     private final ShareTrackRepository shareTrackRepository;
     private final RoomParticipantRepository roomParticipantRepository;
+    private final RoomRepository roomRepository;
     private final ParticipantRoleAssignmentRepository assignmentRepository;
+    private final ShareRoleGrantRepository shareRoleGrantRepository;
     private final TemplatePresetRepository templatePresetRepository;
     private final VisibilityEngine engine;
 
@@ -39,13 +45,17 @@ public class ShareLifecycleService {
             ShareRepository shareRepository,
             ShareTrackRepository shareTrackRepository,
             RoomParticipantRepository roomParticipantRepository,
+            RoomRepository roomRepository,
             ParticipantRoleAssignmentRepository assignmentRepository,
+            ShareRoleGrantRepository shareRoleGrantRepository,
             TemplatePresetRepository templatePresetRepository,
             VisibilityEngine engine) {
         this.shareRepository = shareRepository;
         this.shareTrackRepository = shareTrackRepository;
         this.roomParticipantRepository = roomParticipantRepository;
+        this.roomRepository = roomRepository;
         this.assignmentRepository = assignmentRepository;
+        this.shareRoleGrantRepository = shareRoleGrantRepository;
         this.templatePresetRepository = templatePresetRepository;
         this.engine = engine;
     }
@@ -121,5 +131,23 @@ public class ShareLifecycleService {
         }
 
         return saved;
+    }
+
+    /** Currently-ACTIVE Shares in a room, each with the RoomRoles currently granted to it. */
+    public List<ActiveShareResponse> listActive(UUID roomId) {
+        if (!roomRepository.existsById(roomId)) {
+            throw new IllegalArgumentException("No Room with id " + roomId);
+        }
+
+        return shareRepository.findByRoomIdAndStatus(roomId, Share.Status.ACTIVE).stream()
+                .map(share -> new ActiveShareResponse(
+                        share.getId(), share.getLabel(), activeRoomRoleIds(share.getId())))
+                .toList();
+    }
+
+    private List<UUID> activeRoomRoleIds(UUID shareId) {
+        return shareRoleGrantRepository.findByShareIdAndRevokedAtIsNull(shareId).stream()
+                .map(grant -> grant.getRoomRole().getId())
+                .toList();
     }
 }
