@@ -3,12 +3,15 @@ package com.precued.service;
 import com.precued.entity.Room;
 import com.precued.entity.RoomRole;
 import com.precued.entity.Template;
+import com.precued.entity.TemplateRole;
 import com.precued.entity.User;
 import com.precued.repository.RoomRepository;
 import com.precued.repository.RoomRoleRepository;
 import com.precued.repository.TemplateRepository;
+import com.precued.repository.TemplateRoleRepository;
 import com.precued.repository.UserRepository;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
 import java.util.List;
@@ -20,20 +23,30 @@ public class RoomService {
     private final RoomRepository roomRepository;
     private final RoomRoleRepository roomRoleRepository;
     private final TemplateRepository templateRepository;
+    private final TemplateRoleRepository templateRoleRepository;
     private final UserRepository userRepository;
 
     public RoomService(
             RoomRepository roomRepository,
             RoomRoleRepository roomRoleRepository,
             TemplateRepository templateRepository,
+            TemplateRoleRepository templateRoleRepository,
             UserRepository userRepository) {
         this.roomRepository = roomRepository;
         this.roomRoleRepository = roomRoleRepository;
         this.templateRepository = templateRepository;
+        this.templateRoleRepository = templateRoleRepository;
         this.userRepository = userRepository;
     }
 
-    /** hostDisconnectPolicy defaults to END_CALL (Precued_DataModel.md) when null. */
+    /**
+     * hostDisconnectPolicy defaults to END_CALL (Precued_DataModel.md) when
+     * null. Also copies every TemplateRole under the template into a
+     * RoomRole row (Decision #1: "Roles are copied from Template into Room
+     * at creation, not referenced live") — without this, a room has zero
+     * RoomRoles and no host role can ever be assigned to it.
+     */
+    @Transactional
     public Room create(String templateId, UUID createdByUserId, Room.HostDisconnectPolicy hostDisconnectPolicy) {
         Template template = templateRepository.findById(templateId)
                 .orElseThrow(() -> new IllegalArgumentException("No Template with id " + templateId));
@@ -49,7 +62,25 @@ public class RoomService {
                 hostDisconnectPolicy == null ? Room.HostDisconnectPolicy.END_CALL : hostDisconnectPolicy);
         room.setCreatedAt(Instant.now());
 
-        return roomRepository.save(room);
+        Room saved = roomRepository.save(room);
+
+        List<RoomRole> roomRoles = templateRoleRepository.findByTemplateIdOrderBySortOrder(templateId).stream()
+                .map(templateRole -> toRoomRole(saved, templateRole))
+                .toList();
+        roomRoleRepository.saveAll(roomRoles);
+
+        return saved;
+    }
+
+    private RoomRole toRoomRole(Room room, TemplateRole templateRole) {
+        RoomRole roomRole = new RoomRole();
+        roomRole.setRoom(room);
+        roomRole.setSourceTemplateRoleId(templateRole.getId());
+        roomRole.setRoleKey(templateRole.getRoleKey());
+        roomRole.setName(templateRole.getName());
+        roomRole.setHostRole(templateRole.isHostRole());
+        roomRole.setMaxMembers(templateRole.getMaxMembers());
+        return roomRole;
     }
 
     public Room get(UUID roomId) {
