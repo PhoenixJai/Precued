@@ -175,7 +175,7 @@ class RoomControllerTest {
 
         mockMvc.perform(get("/api/rooms/{roomId}/active-shares", roomId))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$[0].shareId").value(shareId.toString()))
+                .andExpect(jsonPath("$[0].id").value(shareId.toString()))
                 .andExpect(jsonPath("$[0].label").value("Exhibit A"))
                 .andExpect(jsonPath("$[0].roomRoleIds[0]").value(roleId.toString()));
     }

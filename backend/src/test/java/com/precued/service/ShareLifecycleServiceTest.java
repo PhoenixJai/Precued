@@ -191,7 +191,7 @@ class ShareLifecycleServiceTest {
 
         assertThat(result).hasSize(1);
         ActiveShareResponse response = result.get(0);
-        assertThat(response.shareId()).isEqualTo(share.getId());
+        assertThat(response.id()).isEqualTo(share.getId());
         assertThat(response.label()).isEqualTo("Exhibit A");
         assertThat(response.roomRoleIds()).containsExactly(roleId);
     }
