@@ -1,0 +1,30 @@
+# Only for tests that need REAL JPA-managed entities and REAL Hibernate
+# lazy-loading/session behavior (Mockito mocks can't reproduce
+# LazyInitializationException) — activated via @ActiveProfiles("integrationtest").
+# Production runs on Postgres with schema owned by Flyway; here the schema
+# is built directly from @Entity mappings instead, since Flyway's migration
+# SQL is Postgres-specific (gen_random_uuid(), partial indexes) and won't
+# run against H2. open-in-view stays false (inherited from application.yml)
+# — that's the exact contract this kind of test exists to exercise.
+spring:
+  datasource:
+    url: jdbc:h2:mem:precued-integrationtest;MODE=PostgreSQL;DB_CLOSE_DELAY=-1
+    username: sa
+    password:
+    driver-class-name: org.h2.Driver
+  jpa:
+    hibernate:
+      ddl-auto: create-drop
+  flyway:
+    enabled: false
+
+precued:
+  livekit:
+    api-key: test-api-key
+    api-secret: test-api-secret-must-be-at-least-32-bytes-long
+    # RoomServiceClient.createClient (LiveKitConfig) requires http(s), not
+    # ws(s), despite this same property's own doc comment in application.yml
+    # showing "wss://..." — see the flagged finding in the PR this test
+    # shipped with. https:// here only satisfies bean construction for this
+    # test; it is not asserted anywhere.
+    host: https://test.livekit.cloud
