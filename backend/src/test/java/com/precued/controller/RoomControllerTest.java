@@ -1,8 +1,12 @@
 package com.precued.controller;
 
 import com.precued.entity.Room;
+import com.precued.entity.RoomParticipant;
+import com.precued.entity.RoomRole;
 import com.precued.entity.Template;
 import com.precued.entity.User;
+import com.precued.controller.dto.RoomParticipantWithGrantsResponse;
+import com.precued.service.RoomParticipantService;
 import com.precued.service.RoomService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -12,6 +16,7 @@ import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 
 import java.time.Instant;
+import java.util.List;
 import java.util.UUID;
 
 import static org.mockito.ArgumentMatchers.eq;
@@ -27,6 +32,7 @@ class RoomControllerTest {
 
     @Autowired private MockMvc mockMvc;
     @MockBean private RoomService roomService;
+    @MockBean private RoomParticipantService roomParticipantService;
 
     private Room roomWithId(UUID id) {
         Template template = new Template();
@@ -94,5 +100,64 @@ class RoomControllerTest {
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.status").value(404))
                 .andExpect(jsonPath("$.detail").value("No Room with id " + roomId));
+    }
+
+    @Test
+    void listRoomRoles_existingRoom_returns200WithRoles() throws Exception {
+        UUID roomId = UUID.randomUUID();
+        Room room = roomWithId(roomId);
+
+        RoomRole role = new RoomRole();
+        role.setId(UUID.randomUUID());
+        role.setRoom(room);
+        role.setRoleKey("host");
+        role.setName("Host");
+        role.setHostRole(true);
+        when(roomService.listRoles(roomId)).thenReturn(List.of(role));
+
+        mockMvc.perform(get("/api/rooms/{roomId}/room-roles", roomId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].id").value(role.getId().toString()))
+                .andExpect(jsonPath("$[0].roomId").value(roomId.toString()))
+                .andExpect(jsonPath("$[0].roleKey").value("host"))
+                .andExpect(jsonPath("$[0].isHostRole").value(true));
+    }
+
+    @Test
+    void listRoomRoles_unknownRoom_returns404() throws Exception {
+        UUID roomId = UUID.randomUUID();
+        when(roomService.listRoles(roomId)).thenThrow(new IllegalArgumentException("No Room with id " + roomId));
+
+        mockMvc.perform(get("/api/rooms/{roomId}/room-roles", roomId))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void listRoomParticipants_existingRoom_returns200WithParticipantsAndGrants() throws Exception {
+        UUID roomId = UUID.randomUUID();
+        UUID participantId = UUID.randomUUID();
+        UUID roleId = UUID.randomUUID();
+        UUID grantId = UUID.randomUUID();
+
+        RoomParticipantWithGrantsResponse response = new RoomParticipantWithGrantsResponse(
+                participantId, roomId, null, "identity-1", "Viewer", RoomParticipant.AccessLevel.MEMBER,
+                Instant.now(), null, roleId, List.of(grantId));
+        when(roomParticipantService.listWithGrants(roomId)).thenReturn(List.of(response));
+
+        mockMvc.perform(get("/api/rooms/{roomId}/room-participants", roomId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].id").value(participantId.toString()))
+                .andExpect(jsonPath("$[0].activeRoomRoleId").value(roleId.toString()))
+                .andExpect(jsonPath("$[0].activeShareRoleGrantIds[0]").value(grantId.toString()));
+    }
+
+    @Test
+    void listRoomParticipants_unknownRoom_returns404() throws Exception {
+        UUID roomId = UUID.randomUUID();
+        when(roomParticipantService.listWithGrants(roomId))
+                .thenThrow(new IllegalArgumentException("No Room with id " + roomId));
+
+        mockMvc.perform(get("/api/rooms/{roomId}/room-participants", roomId))
+                .andExpect(status().isNotFound());
     }
 }

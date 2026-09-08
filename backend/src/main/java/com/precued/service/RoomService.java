@@ -1,26 +1,34 @@
 package com.precued.service;
 
 import com.precued.entity.Room;
+import com.precued.entity.RoomRole;
 import com.precued.entity.Template;
 import com.precued.entity.User;
 import com.precued.repository.RoomRepository;
+import com.precued.repository.RoomRoleRepository;
 import com.precued.repository.TemplateRepository;
 import com.precued.repository.UserRepository;
 import org.springframework.stereotype.Service;
 
 import java.time.Instant;
+import java.util.List;
 import java.util.UUID;
 
 @Service
 public class RoomService {
 
     private final RoomRepository roomRepository;
+    private final RoomRoleRepository roomRoleRepository;
     private final TemplateRepository templateRepository;
     private final UserRepository userRepository;
 
     public RoomService(
-            RoomRepository roomRepository, TemplateRepository templateRepository, UserRepository userRepository) {
+            RoomRepository roomRepository,
+            RoomRoleRepository roomRoleRepository,
+            TemplateRepository templateRepository,
+            UserRepository userRepository) {
         this.roomRepository = roomRepository;
+        this.roomRoleRepository = roomRoleRepository;
         this.templateRepository = templateRepository;
         this.userRepository = userRepository;
     }
@@ -47,5 +55,10 @@ public class RoomService {
     public Room get(UUID roomId) {
         return roomRepository.findById(roomId)
                 .orElseThrow(() -> new IllegalArgumentException("No Room with id " + roomId));
+    }
+
+    public List<RoomRole> listRoles(UUID roomId) {
+        get(roomId); // 404 if the room itself doesn't exist
+        return roomRoleRepository.findByRoomId(roomId);
     }
 }

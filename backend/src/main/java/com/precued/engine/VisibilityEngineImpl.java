@@ -19,17 +19,21 @@ import org.springframework.stereotype.Component;
 import retrofit2.Response;
 
 import java.io.IOException;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 
 /**
- * Part A: pure DB compute (unchanged from the original implementation).
- * Part B: push via a LiveKit data message, RELIABLE mode, targeted at the
- * Share's publisher_participant_id only — see "VisibilityEngine — Interface
- * Spec" / transport decision in Precued_DataModel.md for why (the publisher
- * is already connected to LiveKit; a second websocket channel would just be
- * a second thing to fail).
+ * Part A: {@link #computeGrantsForShare} is pure DB compute (unchanged from
+ * the original implementation) and remains Share-scoped; the publisher-wide
+ * union in {@link #computeGrantsForPublisher} is what is actually safe to
+ * push. Part B: push via a LiveKit data message, RELIABLE mode, targeted at
+ * the publisher only — see "VisibilityEngine — Interface Spec" / transport
+ * decision in Precued_DataModel.md for why (the publisher is already
+ * connected to LiveKit; a second websocket channel would just be a second
+ * thing to fail).
  */
 @Component
 public class VisibilityEngineImpl implements VisibilityEngine {
@@ -98,19 +102,93 @@ public class VisibilityEngineImpl implements VisibilityEngine {
     }
 
     @Override
-    public void pushGrantsToPublisher(UUID shareId, List<ParticipantTrackPermission> grants) {
-        Share share = shareRepository.findById(shareId)
-                .orElseThrow(() -> new IllegalArgumentException("No Share with id " + shareId));
+    public List<ParticipantTrackPermission> computeGrantsForPublisher(UUID publisherParticipantId) {
+        RoomParticipant publisher = roomParticipantRepository.findById(publisherParticipantId)
+                .orElseThrow(() -> new IllegalArgumentException(
+                        "No RoomParticipant with id " + publisherParticipantId));
+
+        List<Share> activeShares =
+                shareRepository.findByPublisherIdAndStatus(publisherParticipantId, Share.Status.ACTIVE);
+
+        // viewerIdentity -> union of every track sid that viewer is allowed
+        // across every one of the publisher's active Shares.
+        java.util.Map<String, Set<String>> unionedByViewer = new java.util.LinkedHashMap<>();
+        for (Share share : activeShares) {
+            for (ParticipantTrackPermission grant : computeGrantsForShare(share.getId())) {
+                Set<String> tracks = unionedByViewer.computeIfAbsent(grant.livekitIdentity(), k -> new LinkedHashSet<>());
+                if (grant.allowed()) {
+                    tracks.addAll(grant.trackSids());
+                }
+            }
+        }
+
+        List<String> baseTrackSids = fetchBaseTrackSids(publisher);
+
+        return roomParticipantRepository.findByRoomId(publisher.getRoom().getId()).stream()
+                .filter(participant -> participant.getLeftAt() == null)
+                .map(participant -> {
+                    Set<String> tracks = new LinkedHashSet<>(
+                            unionedByViewer.getOrDefault(participant.getLivekitIdentity(), Set.of()));
+                    // Base camera/mic tracks are always allowed to anyone
+                    // still connected to the room, regardless of Share access.
+                    tracks.addAll(baseTrackSids);
+                    return new ParticipantTrackPermission(
+                            participant.getLivekitIdentity(), !tracks.isEmpty(), List.copyOf(tracks));
+                })
+                .toList();
+    }
+
+    /**
+     * Nothing in the schema persists a publisher's non-Share (camera/mic)
+     * tracks — see the interface javadoc. LiveKit itself is the only
+     * authoritative source, so this is the one step of Part A that is not
+     * DB-only. A failure here must not block the Share-scoped grants in the
+     * rest of the push: log and treat as "no base tracks this cycle" rather
+     * than throwing, consistent with the fail-closed-per-participant (not
+     * per-room) blast-radius principle used elsewhere in this engine.
+     */
+    private List<String> fetchBaseTrackSids(RoomParticipant publisher) {
+        String roomName = publisher.getRoom().getLivekitRoomName();
+        String publisherIdentity = publisher.getLivekitIdentity();
+        try {
+            Response<LivekitModels.ParticipantInfo> response =
+                    roomServiceClient.getParticipant(roomName, publisherIdentity).execute();
+            if (!response.isSuccessful() || response.body() == null) {
+                log.warn(
+                        "Could not fetch LiveKit participant info for {} in room {} (base tracks omitted this"
+                                + " cycle): HTTP {}",
+                        publisherIdentity, roomName, response.code());
+                return List.of();
+            }
+            return response.body().getTracksList().stream()
+                    .filter(track -> track.getSource() == LivekitModels.TrackSource.CAMERA
+                            || track.getSource() == LivekitModels.TrackSource.MICROPHONE)
+                    .map(LivekitModels.TrackInfo::getSid)
+                    .toList();
+        } catch (IOException e) {
+            log.warn(
+                    "Failed to fetch LiveKit participant info for {} in room {} (base tracks omitted this cycle): {}",
+                    publisherIdentity, roomName, e.getMessage(), e);
+            return List.of();
+        }
+    }
+
+    @Override
+    public void pushGrantsToPublisher(UUID publisherParticipantId, List<ParticipantTrackPermission> grants) {
+        RoomParticipant publisher = roomParticipantRepository.findById(publisherParticipantId)
+                .orElseThrow(() -> new IllegalArgumentException(
+                        "No RoomParticipant with id " + publisherParticipantId));
 
         byte[] payload;
         try {
             payload = objectMapper.writeValueAsBytes(grants);
         } catch (JsonProcessingException e) {
-            throw new IllegalStateException("Failed to serialize grants for share " + shareId, e);
+            throw new IllegalStateException(
+                    "Failed to serialize grants for publisher " + publisherParticipantId, e);
         }
 
-        String roomName = share.getRoom().getLivekitRoomName();
-        String publisherIdentity = share.getPublisher().getLivekitIdentity();
+        String roomName = publisher.getRoom().getLivekitRoomName();
+        String publisherIdentity = publisher.getLivekitIdentity();
 
         try {
             // RoomServiceClient.sendData(roomName, data, kind, destinationSids,
@@ -129,29 +207,41 @@ public class VisibilityEngineImpl implements VisibilityEngine {
                     .execute();
             if (!response.isSuccessful()) {
                 throw new IllegalStateException(
-                        "LiveKit rejected visibility-grants push for share " + shareId
+                        "LiveKit rejected visibility-grants push for publisher " + publisherParticipantId
                                 + ": HTTP " + response.code());
             }
         } catch (IOException e) {
-            throw new IllegalStateException("Failed to push grants to publisher for share " + shareId, e);
+            throw new IllegalStateException(
+                    "Failed to push grants to publisher " + publisherParticipantId, e);
         }
     }
 
     @Override
+    public void recomputeAndPushForShare(UUID shareId) {
+        Share share = shareRepository.findById(shareId)
+                .orElseThrow(() -> new IllegalArgumentException("No Share with id " + shareId));
+        recomputeAndPushForPublisher(share.getPublisher().getId());
+    }
+
+    @Override
     public void recomputeAndPushForRoom(UUID roomId) {
-        // Each Share's push is isolated: one publisher's push failing (bad
-        // LiveKit response, IO error) must not stop the others in the same
-        // room from getting their recompute — same fail-closed-per-participant
-        // blast-radius principle as the role-assignment race handling.
-        shareRepository.findByRoomIdAndStatus(roomId, Share.Status.ACTIVE)
-                .forEach(share -> {
+        // Each publisher's push is isolated: one publisher's push failing
+        // (bad LiveKit response, IO error) must not stop the others in the
+        // same room from getting their recompute — same
+        // fail-closed-per-participant blast-radius principle as the
+        // role-assignment race handling. De-duplicated by publisher: a
+        // publisher with two active Shares gets exactly one recompute+push
+        // carrying their full permission set, not one per Share.
+        shareRepository.findByRoomIdAndStatus(roomId, Share.Status.ACTIVE).stream()
+                .map(share -> share.getPublisher().getId())
+                .distinct()
+                .forEach(publisherId -> {
                     try {
-                        recomputeAndPushForShare(share.getId());
+                        recomputeAndPushForPublisher(publisherId);
                     } catch (RuntimeException e) {
                         log.warn(
-                                "Failed to recompute/push visibility grants for share {} (publisher {}): {}",
-                                share.getId(),
-                                share.getPublisher().getLivekitIdentity(),
+                                "Failed to recompute/push visibility grants for publisher {}: {}",
+                                publisherId,
                                 e.getMessage(),
                                 e);
                     }
