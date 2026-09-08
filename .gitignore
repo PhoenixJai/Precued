@@ -19,4 +19,4 @@ build/
 # Environment / secrets
 .env
 .env.local
-application-local.yml
+application-local.ymlfrontend/*.tsbuildinfo

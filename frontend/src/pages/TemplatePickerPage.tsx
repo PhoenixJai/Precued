@@ -21,6 +21,7 @@ const templateCards = [
     roles: ["Judge", "Jury", "Defense", "Prosecution"],
     bullets: ["Role-specific information access", "Support for exhibits and evidence", "Designed for legal teams and education"],
     functional: false,
+    badge: undefined,
   },
   {
     id: "ld_debate",
@@ -29,6 +30,7 @@ const templateCards = [
     roles: ["Judge", "Affirmative", "Negative", "Audience"],
     bullets: ["Separate materials for each side", "Timed rounds and structure", "Ideal for education and competitions"],
     functional: false,
+    badge: undefined,
   },
 ] as const;
 
