@@ -1,15 +1,19 @@
 package com.precued.service;
 
+import com.precued.controller.dto.ActiveShareResponse;
 import com.precued.engine.VisibilityEngine;
 import com.precued.entity.ParticipantRoleAssignment;
 import com.precued.entity.Room;
 import com.precued.entity.RoomParticipant;
 import com.precued.entity.RoomRole;
 import com.precued.entity.Share;
+import com.precued.entity.ShareRoleGrant;
 import com.precued.entity.ShareTrack;
 import com.precued.repository.ParticipantRoleAssignmentRepository;
 import com.precued.repository.RoomParticipantRepository;
+import com.precued.repository.RoomRepository;
 import com.precued.repository.ShareRepository;
+import com.precued.repository.ShareRoleGrantRepository;
 import com.precued.repository.ShareTrackRepository;
 import com.precued.repository.TemplatePresetRepository;
 import org.junit.jupiter.api.BeforeEach;
@@ -44,7 +48,9 @@ class ShareLifecycleServiceTest {
     @Mock private ShareRepository shareRepository;
     @Mock private ShareTrackRepository shareTrackRepository;
     @Mock private RoomParticipantRepository roomParticipantRepository;
+    @Mock private RoomRepository roomRepository;
     @Mock private ParticipantRoleAssignmentRepository assignmentRepository;
+    @Mock private ShareRoleGrantRepository shareRoleGrantRepository;
     @Mock private TemplatePresetRepository templatePresetRepository;
     @Mock private VisibilityEngine engine;
 
@@ -59,7 +65,9 @@ class ShareLifecycleServiceTest {
                 shareRepository,
                 shareTrackRepository,
                 roomParticipantRepository,
+                roomRepository,
                 assignmentRepository,
+                shareRoleGrantRepository,
                 templatePresetRepository,
                 engine);
     }
@@ -161,5 +169,40 @@ class ShareLifecycleServiceTest {
         verify(shareTrackRepository, never()).save(alreadyUnpublished);
         verify(engine, never()).recomputeAndPushForShare(any());
         verify(engine, never()).recomputeAndPushForRoom(any());
+    }
+
+    @Test
+    void listActive_returnsActiveSharesWithTheirGrantedRoomRoleIds() {
+        when(roomRepository.existsById(roomId)).thenReturn(true);
+
+        Share share = new Share();
+        share.setId(UUID.randomUUID());
+        share.setLabel("Exhibit A");
+        when(shareRepository.findByRoomIdAndStatus(roomId, Share.Status.ACTIVE)).thenReturn(List.of(share));
+
+        UUID roleId = UUID.randomUUID();
+        RoomRole role = new RoomRole();
+        role.setId(roleId);
+        ShareRoleGrant grant = new ShareRoleGrant();
+        grant.setRoomRole(role);
+        when(shareRoleGrantRepository.findByShareIdAndRevokedAtIsNull(share.getId())).thenReturn(List.of(grant));
+
+        List<ActiveShareResponse> result = service.listActive(roomId);
+
+        assertThat(result).hasSize(1);
+        ActiveShareResponse response = result.get(0);
+        assertThat(response.shareId()).isEqualTo(share.getId());
+        assertThat(response.label()).isEqualTo("Exhibit A");
+        assertThat(response.roomRoleIds()).containsExactly(roleId);
+    }
+
+    @Test
+    void listActive_unknownRoom_throwsIllegalArgumentException() {
+        UUID unknownRoomId = UUID.randomUUID();
+        when(roomRepository.existsById(unknownRoomId)).thenReturn(false);
+
+        assertThatThrownBy(() -> service.listActive(unknownRoomId))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining(unknownRoomId.toString());
     }
 }
