@@ -118,8 +118,8 @@ function CallExperience({ roomId }: { roomId: string }) {
   }, [roomId]);
 
   useEffect(() => {
-    refresh();
-    const timer = window.setInterval(refresh, POLL_MS);
+    void refresh();
+    const timer = window.setInterval(() => void refresh(), POLL_MS);
     return () => window.clearInterval(timer);
   }, [refresh]);
 
@@ -129,6 +129,7 @@ function CallExperience({ roomId }: { roomId: string }) {
       .filter((id): id is string => Boolean(id));
   }, [roles]);
 
+  const currentShareRoleKey = currentShare ? [...currentShare.roomRoleIds].sort().join(",") : "";
   useEffect(() => {
     if (currentShare && presets.length && roles.length) {
       const currentIds = [...currentShare.roomRoleIds].sort();
@@ -140,7 +141,7 @@ function CallExperience({ roomId }: { roomId: string }) {
     } else if (!selectedPresetId && presets.length) {
       setSelectedPresetId(presets[0].id);
     }
-  }, [currentShare?.id, JSON.stringify(currentShare?.roomRoleIds ?? []), presets, roles, roleIdsForPreset, selectedPresetId]);
+  }, [currentShare?.id, currentShareRoleKey, presets, roles, roleIdsForPreset, selectedPresetId]);
 
   useEffect(() => {
     const handleData = (...args: any[]) => {
@@ -262,7 +263,7 @@ function CallExperience({ roomId }: { roomId: string }) {
     if (currentShare && me.isHost) {
       try { await api.endShare(currentShare.id); } catch { /* Disconnect anyway. */ }
     }
-    room.disconnect();
+    await room.disconnect();
     navigate(me.isHost ? "/templates" : "/");
   }
 
@@ -353,14 +354,13 @@ function CallExperience({ roomId }: { roomId: string }) {
             canSeeCurrentShare={canSeeCurrentShare}
             muted={!room.localParticipant.isMicrophoneEnabled}
             videoOff={!room.localParticipant.isCameraEnabled}
-            onToggleMute={() => room.localParticipant.setMicrophoneEnabled(!room.localParticipant.isMicrophoneEnabled)}
-            onToggleVideo={() => room.localParticipant.setCameraEnabled(!room.localParticipant.isCameraEnabled)}
-            onEndCall={endCall}
+            onToggleMute={() => { void room.localParticipant.setMicrophoneEnabled(!room.localParticipant.isMicrophoneEnabled); }}
+            onToggleVideo={() => { void room.localParticipant.setCameraEnabled(!room.localParticipant.isCameraEnabled); }}
+            onEndCall={() => { void endCall(); }}
             moreOpen={moreOpen}
             setMoreOpen={setMoreOpen}
-            currentShare={currentShare}
-            onStartShare={startScreenShare}
-            onStopShare={stopScreenShare}
+            onStartShare={() => { void startScreenShare(); }}
+            onStopShare={() => { void stopScreenShare(); }}
             busy={busy}
           />
         </div>
