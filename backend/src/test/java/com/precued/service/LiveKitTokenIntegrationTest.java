@@ -78,6 +78,7 @@ class LiveKitTokenIntegrationTest {
         participant.setDisplayName("Jordan");
         participant.setAccessLevel(RoomParticipant.AccessLevel.MEMBER);
         participant.setJoinedAt(Instant.now());
+        participant.setSessionToken("test-session-token-" + UUID.randomUUID());
         RoomParticipant savedParticipant = roomParticipantRepository.save(participant);
 
         // The repository call above returns to a closed persistence context
@@ -85,7 +86,8 @@ class LiveKitTokenIntegrationTest {
         // so LiveKitTokenService.issueToken's own findById() -- run under
         // its own fresh, separate transaction/session -- is what genuinely
         // reproduces the lazy proxy this bug was about.
-        mockMvc.perform(get("/api/room-participants/{id}/livekit-token", savedParticipant.getId()))
+        mockMvc.perform(get("/api/room-participants/{id}/livekit-token", savedParticipant.getId())
+                        .header("Authorization", "Bearer " + savedParticipant.getSessionToken()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.roomName").value(savedRoom.getLivekitRoomName()))
                 .andExpect(jsonPath("$.identity").value(savedParticipant.getLivekitIdentity()))

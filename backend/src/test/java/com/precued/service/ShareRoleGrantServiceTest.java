@@ -1,11 +1,15 @@
 package com.precued.service;
 
 import com.precued.engine.VisibilityEngine;
+import com.precued.entity.RoomParticipant;
+import com.precued.entity.RoomRole;
 import com.precued.entity.Share;
 import com.precued.entity.ShareRoleGrant;
 import com.precued.repository.RoomRoleRepository;
 import com.precued.repository.ShareRepository;
 import com.precued.repository.ShareRoleGrantRepository;
+import com.precued.security.CurrentParticipantContext;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
@@ -14,6 +18,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import java.util.Optional;
 import java.util.UUID;
 
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -34,13 +39,34 @@ class ShareRoleGrantServiceTest {
 
     private ShareRoleGrantService service;
 
+    private final UUID publisherId = UUID.randomUUID();
+
+    @AfterEach
+    void clearAuthentication() {
+        CurrentParticipantContext.clear();
+    }
+
+    private void authenticateAsPublisher() {
+        RoomParticipant self = new RoomParticipant();
+        self.setId(publisherId);
+        CurrentParticipantContext.set(self);
+    }
+
+    private Share shareWithPublisher(UUID shareId) {
+        RoomParticipant publisher = new RoomParticipant();
+        publisher.setId(publisherId);
+        Share share = new Share();
+        share.setId(shareId);
+        share.setPublisher(publisher);
+        return share;
+    }
+
     @Test
     void revoke_recomputesOnlyThatOneShare() {
         service = new ShareRoleGrantService(grantRepository, shareRepository, roomRoleRepository, engine);
 
         UUID shareId = UUID.randomUUID();
-        Share share = new Share();
-        share.setId(shareId);
+        Share share = shareWithPublisher(shareId);
 
         UUID grantId = UUID.randomUUID();
         ShareRoleGrant grant = new ShareRoleGrant();
@@ -48,11 +74,64 @@ class ShareRoleGrantServiceTest {
         grant.setShare(share);
 
         when(grantRepository.findById(grantId)).thenReturn(Optional.of(grant));
+        when(shareRepository.findById(shareId)).thenReturn(Optional.of(share));
         when(grantRepository.save(any(ShareRoleGrant.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        authenticateAsPublisher();
 
         service.revoke(grantId);
 
         verify(engine).recomputeAndPushForShare(shareId);
         verify(engine, never()).recomputeAndPushForRoom(any());
+    }
+
+    @Test
+    void grant_byNonPublisher_rejectsAndDoesNotCreateGrant() {
+        service = new ShareRoleGrantService(grantRepository, shareRepository, roomRoleRepository, engine);
+
+        UUID shareId = UUID.randomUUID();
+        Share share = shareWithPublisher(shareId);
+        UUID roleId = UUID.randomUUID();
+        RoomRole role = new RoomRole();
+        role.setId(roleId);
+
+        when(shareRepository.findById(shareId)).thenReturn(Optional.of(share));
+        when(roomRoleRepository.findById(roleId)).thenReturn(Optional.of(role));
+
+        RoomParticipant someoneElse = new RoomParticipant();
+        someoneElse.setId(UUID.randomUUID());
+        CurrentParticipantContext.set(someoneElse);
+
+        assertThatThrownBy(() -> service.grant(shareId, roleId))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("Only the Share's publisher can grant visibility to it");
+
+        verify(grantRepository, never()).save(any());
+        verify(engine, never()).recomputeAndPushForShare(any());
+    }
+
+    @Test
+    void revoke_byNonPublisher_rejectsAndDoesNotRevokeGrant() {
+        service = new ShareRoleGrantService(grantRepository, shareRepository, roomRoleRepository, engine);
+
+        UUID shareId = UUID.randomUUID();
+        Share share = shareWithPublisher(shareId);
+        UUID grantId = UUID.randomUUID();
+        ShareRoleGrant grant = new ShareRoleGrant();
+        grant.setId(grantId);
+        grant.setShare(share);
+
+        when(grantRepository.findById(grantId)).thenReturn(Optional.of(grant));
+        when(shareRepository.findById(shareId)).thenReturn(Optional.of(share));
+
+        RoomParticipant someoneElse = new RoomParticipant();
+        someoneElse.setId(UUID.randomUUID());
+        CurrentParticipantContext.set(someoneElse);
+
+        assertThatThrownBy(() -> service.revoke(grantId))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("Only the Share's publisher can revoke visibility on it");
+
+        verify(grantRepository, never()).save(any());
+        verify(engine, never()).recomputeAndPushForShare(any());
     }
 }

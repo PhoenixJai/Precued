@@ -16,6 +16,8 @@ import com.precued.repository.ShareRepository;
 import com.precued.repository.ShareRoleGrantRepository;
 import com.precued.repository.ShareTrackRepository;
 import com.precued.repository.TemplatePresetRepository;
+import com.precued.security.CurrentParticipantContext;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -70,6 +72,17 @@ class ShareLifecycleServiceTest {
                 shareRoleGrantRepository,
                 templatePresetRepository,
                 engine);
+
+        // Every test below acts as publisherId — matches the only real
+        // caller pattern (self-start/self-end a Share), enforced in the service.
+        RoomParticipant self = new RoomParticipant();
+        self.setId(publisherId);
+        CurrentParticipantContext.set(self);
+    }
+
+    @AfterEach
+    void clearAuthentication() {
+        CurrentParticipantContext.clear();
     }
 
     private RoomParticipant givenPublisherInRoom() {
@@ -146,11 +159,52 @@ class ShareLifecycleServiceTest {
     }
 
     @Test
-    void end_setsEndedStatusAndUnpublishesEveryTrack_withNoEngineCall() {
+    void start_onBehalfOfAnotherParticipant_rejectsAndDoesNotCreateAShare() {
+        givenPublisherInRoom();
+
+        RoomParticipant someoneElse = new RoomParticipant();
+        someoneElse.setId(UUID.randomUUID());
+        CurrentParticipantContext.set(someoneElse);
+
+        assertThatThrownBy(() -> service.start(roomId, publisherId, null, "Exhibit A"))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("Cannot start a Share on behalf of another participant");
+
+        verify(shareRepository, never()).save(any());
+        verify(engine, never()).recomputeAndPushForShare(any());
+    }
+
+    @Test
+    void end_byNonPublisher_rejectsAndDoesNotEndTheShare() {
         UUID shareId = UUID.randomUUID();
+        RoomParticipant publisher = new RoomParticipant();
+        publisher.setId(publisherId);
         Share share = new Share();
         share.setId(shareId);
         share.setStatus(Share.Status.ACTIVE);
+        share.setPublisher(publisher);
+        when(shareRepository.findById(shareId)).thenReturn(Optional.of(share));
+
+        RoomParticipant someoneElse = new RoomParticipant();
+        someoneElse.setId(UUID.randomUUID());
+        CurrentParticipantContext.set(someoneElse);
+
+        assertThatThrownBy(() -> service.end(shareId))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("Only the Share's publisher can end it");
+
+        verify(shareRepository, never()).save(any());
+    }
+
+    @Test
+    void end_setsEndedStatusAndUnpublishesEveryTrack_withNoEngineCall() {
+        UUID shareId = UUID.randomUUID();
+        RoomParticipant publisher = new RoomParticipant();
+        publisher.setId(publisherId);
+        Share share = new Share();
+        share.setId(shareId);
+        share.setStatus(Share.Status.ACTIVE);
+        share.setPublisher(publisher);
         when(shareRepository.findById(shareId)).thenReturn(Optional.of(share));
         when(shareRepository.save(any(Share.class))).thenAnswer(invocation -> invocation.getArgument(0));
 

@@ -12,6 +12,7 @@ import com.precued.repository.RoomParticipantRepository;
 import com.precued.repository.RoomRepository;
 import com.precued.repository.ShareRoleGrantRepository;
 import com.precued.repository.UserRepository;
+import com.precued.util.OpaqueTokenGenerator;
 import org.springframework.stereotype.Service;
 
 import java.time.Instant;
@@ -60,6 +61,7 @@ public class RoomParticipantService {
         participant.setLivekitIdentity(UUID.randomUUID().toString());
         participant.setDisplayName(displayName);
         participant.setJoinedAt(Instant.now());
+        participant.setSessionToken(OpaqueTokenGenerator.generate());
 
         return roomParticipantRepository.save(participant);
     }

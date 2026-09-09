@@ -1,6 +1,7 @@
 package com.precued.controller;
 
 import com.precued.controller.dto.TemplatePresetResponse;
+import com.precued.repository.RoomParticipantRepository;
 import com.precued.service.TemplatePresetService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -21,6 +22,10 @@ class TemplateControllerTest {
 
     @Autowired private MockMvc mockMvc;
     @MockBean private TemplatePresetService templatePresetService;
+    // /api/templates/** is excluded from ParticipantSessionInterceptor, but
+    // the interceptor bean (wired via WebMvcConfig, which @WebMvcTest picks
+    // up) still needs this dependency satisfied for the context to load.
+    @MockBean private RoomParticipantRepository roomParticipantRepository;
 
     @Test
     void listPresets_existingTemplate_returns200WithPresetsAndRoleKeys() throws Exception {

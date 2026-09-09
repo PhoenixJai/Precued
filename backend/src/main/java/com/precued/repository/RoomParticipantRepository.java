@@ -10,4 +10,5 @@ import java.util.UUID;
 public interface RoomParticipantRepository extends JpaRepository<RoomParticipant, UUID> {
     List<RoomParticipant> findByRoomId(UUID roomId);
     Optional<RoomParticipant> findByRoomIdAndLivekitIdentity(UUID roomId, String livekitIdentity);
+    Optional<RoomParticipant> findBySessionToken(String sessionToken);
 }

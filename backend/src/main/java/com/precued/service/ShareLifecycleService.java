@@ -14,6 +14,7 @@ import com.precued.repository.ShareRepository;
 import com.precued.repository.ShareRoleGrantRepository;
 import com.precued.repository.ShareTrackRepository;
 import com.precued.repository.TemplatePresetRepository;
+import com.precued.security.CurrentParticipantContext;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -76,6 +77,10 @@ public class ShareLifecycleService {
                     "RoomParticipant " + publisherParticipantId + " does not belong to room " + roomId);
         }
 
+        if (!CurrentParticipantContext.get().getId().equals(publisherParticipantId)) {
+            throw new IllegalStateException("Cannot start a Share on behalf of another participant");
+        }
+
         ParticipantRoleAssignment activeAssignment = assignmentRepository
                 .findByRoomParticipantIdAndRevokedAtIsNull(publisherParticipantId)
                 .orElseThrow(() -> new IllegalStateException(
@@ -118,6 +123,10 @@ public class ShareLifecycleService {
     public Share end(UUID shareId) {
         Share share = shareRepository.findById(shareId)
                 .orElseThrow(() -> new IllegalArgumentException("No Share with id " + shareId));
+
+        if (!CurrentParticipantContext.get().getId().equals(share.getPublisher().getId())) {
+            throw new IllegalStateException("Only the Share's publisher can end it");
+        }
 
         Instant endedAt = Instant.now();
         share.setStatus(Share.Status.ENDED);

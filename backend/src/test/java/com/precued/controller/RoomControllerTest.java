@@ -7,6 +7,7 @@ import com.precued.entity.Template;
 import com.precued.entity.User;
 import com.precued.controller.dto.ActiveShareResponse;
 import com.precued.controller.dto.RoomParticipantWithGrantsResponse;
+import com.precued.repository.RoomParticipantRepository;
 import com.precued.service.RoomParticipantService;
 import com.precued.service.RoomService;
 import com.precued.service.ShareLifecycleService;
@@ -19,6 +20,7 @@ import org.springframework.test.web.servlet.MockMvc;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 import static org.mockito.ArgumentMatchers.eq;
@@ -36,6 +38,19 @@ class RoomControllerTest {
     @MockBean private RoomService roomService;
     @MockBean private RoomParticipantService roomParticipantService;
     @MockBean private ShareLifecycleService shareLifecycleService;
+    @MockBean private RoomParticipantRepository roomParticipantRepository;
+
+    private static final String TEST_TOKEN = "test-session-token";
+
+    /** Stubs a valid session whose participant belongs to the given room — required by ParticipantSessionInterceptor. */
+    private void stubAuthenticatedParticipant(UUID roomId) {
+        Room room = new Room();
+        room.setId(roomId);
+        RoomParticipant participant = new RoomParticipant();
+        participant.setId(UUID.randomUUID());
+        participant.setRoom(room);
+        when(roomParticipantRepository.findBySessionToken(TEST_TOKEN)).thenReturn(Optional.of(participant));
+    }
 
     private Room roomWithId(UUID id) {
         Template template = new Template();
@@ -88,8 +103,9 @@ class RoomControllerTest {
     void get_existingRoom_returns200() throws Exception {
         UUID roomId = UUID.randomUUID();
         when(roomService.get(roomId)).thenReturn(roomWithId(roomId));
+        stubAuthenticatedParticipant(roomId);
 
-        mockMvc.perform(get("/api/rooms/{id}", roomId))
+        mockMvc.perform(get("/api/rooms/{id}", roomId).header("Authorization", "Bearer " + TEST_TOKEN))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.id").value(roomId.toString()));
     }
@@ -98,8 +114,9 @@ class RoomControllerTest {
     void get_unknownRoom_returns404() throws Exception {
         UUID roomId = UUID.randomUUID();
         when(roomService.get(roomId)).thenThrow(new IllegalArgumentException("No Room with id " + roomId));
+        stubAuthenticatedParticipant(roomId);
 
-        mockMvc.perform(get("/api/rooms/{id}", roomId))
+        mockMvc.perform(get("/api/rooms/{id}", roomId).header("Authorization", "Bearer " + TEST_TOKEN))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.status").value(404))
                 .andExpect(jsonPath("$.detail").value("No Room with id " + roomId));
@@ -146,8 +163,9 @@ class RoomControllerTest {
                 participantId, roomId, null, "identity-1", "Viewer", RoomParticipant.AccessLevel.MEMBER,
                 Instant.now(), null, roleId, List.of(grantId));
         when(roomParticipantService.listWithGrants(roomId)).thenReturn(List.of(response));
+        stubAuthenticatedParticipant(roomId);
 
-        mockMvc.perform(get("/api/rooms/{roomId}/room-participants", roomId))
+        mockMvc.perform(get("/api/rooms/{roomId}/room-participants", roomId).header("Authorization", "Bearer " + TEST_TOKEN))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[0].id").value(participantId.toString()))
                 .andExpect(jsonPath("$[0].activeRoomRoleId").value(roleId.toString()))
@@ -159,8 +177,9 @@ class RoomControllerTest {
         UUID roomId = UUID.randomUUID();
         when(roomParticipantService.listWithGrants(roomId))
                 .thenThrow(new IllegalArgumentException("No Room with id " + roomId));
+        stubAuthenticatedParticipant(roomId);
 
-        mockMvc.perform(get("/api/rooms/{roomId}/room-participants", roomId))
+        mockMvc.perform(get("/api/rooms/{roomId}/room-participants", roomId).header("Authorization", "Bearer " + TEST_TOKEN))
                 .andExpect(status().isNotFound());
     }
 
@@ -172,8 +191,9 @@ class RoomControllerTest {
 
         ActiveShareResponse response = new ActiveShareResponse(shareId, "Exhibit A", List.of(roleId));
         when(shareLifecycleService.listActive(roomId)).thenReturn(List.of(response));
+        stubAuthenticatedParticipant(roomId);
 
-        mockMvc.perform(get("/api/rooms/{roomId}/active-shares", roomId))
+        mockMvc.perform(get("/api/rooms/{roomId}/active-shares", roomId).header("Authorization", "Bearer " + TEST_TOKEN))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[0].id").value(shareId.toString()))
                 .andExpect(jsonPath("$[0].label").value("Exhibit A"))
@@ -185,8 +205,9 @@ class RoomControllerTest {
         UUID roomId = UUID.randomUUID();
         when(shareLifecycleService.listActive(roomId))
                 .thenThrow(new IllegalArgumentException("No Room with id " + roomId));
+        stubAuthenticatedParticipant(roomId);
 
-        mockMvc.perform(get("/api/rooms/{roomId}/active-shares", roomId))
+        mockMvc.perform(get("/api/rooms/{roomId}/active-shares", roomId).header("Authorization", "Bearer " + TEST_TOKEN))
                 .andExpect(status().isNotFound());
     }
 }

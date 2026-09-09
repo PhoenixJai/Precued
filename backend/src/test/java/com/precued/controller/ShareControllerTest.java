@@ -3,6 +3,7 @@ package com.precued.controller;
 import com.precued.entity.Room;
 import com.precued.entity.RoomParticipant;
 import com.precued.entity.Share;
+import com.precued.repository.RoomParticipantRepository;
 import com.precued.service.ShareLifecycleService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -12,6 +13,7 @@ import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 
 import java.time.Instant;
+import java.util.Optional;
 import java.util.UUID;
 
 import static org.mockito.ArgumentMatchers.eq;
@@ -34,6 +36,19 @@ class ShareControllerTest {
 
     @Autowired private MockMvc mockMvc;
     @MockBean private ShareLifecycleService shareLifecycleService;
+    @MockBean private RoomParticipantRepository roomParticipantRepository;
+
+    private static final String TEST_TOKEN = "test-session-token";
+
+    /** Stubs a valid session for exactly this participant — required to start/end a Share as yourself. */
+    private void stubAuthenticatedParticipant(UUID participantId) {
+        RoomParticipant self = new RoomParticipant();
+        self.setId(participantId);
+        Room room = new Room();
+        room.setId(UUID.randomUUID());
+        self.setRoom(room);
+        when(roomParticipantRepository.findBySessionToken(TEST_TOKEN)).thenReturn(Optional.of(self));
+    }
 
     @Test
     void startShare_publisherWithoutHostRole_returns403WithClearErrorBody() throws Exception {
@@ -42,6 +57,7 @@ class ShareControllerTest {
         String message = "RoomParticipant " + publisherId + " does not hold a host role and cannot start a Share";
         when(shareLifecycleService.start(eq(roomId), eq(publisherId), isNull(), eq("Exhibit A")))
                 .thenThrow(new IllegalStateException(message));
+        stubAuthenticatedParticipant(publisherId);
 
         String body = """
                 {"roomId":"%s","publisherParticipantId":"%s","appliedPresetId":null,"label":"Exhibit A"}
@@ -49,6 +65,7 @@ class ShareControllerTest {
 
         mockMvc.perform(post("/api/shares")
                         .contentType(MediaType.APPLICATION_JSON)
+                        .header("Authorization", "Bearer " + TEST_TOKEN)
                         .content(body))
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.status").value(403))
@@ -76,6 +93,7 @@ class ShareControllerTest {
 
         when(shareLifecycleService.start(eq(roomId), eq(publisherId), isNull(), eq("Exhibit A")))
                 .thenReturn(share);
+        stubAuthenticatedParticipant(publisherId);
 
         String body = """
                 {"roomId":"%s","publisherParticipantId":"%s","appliedPresetId":null,"label":"Exhibit A"}
@@ -83,6 +101,7 @@ class ShareControllerTest {
 
         mockMvc.perform(post("/api/shares")
                         .contentType(MediaType.APPLICATION_JSON)
+                        .header("Authorization", "Bearer " + TEST_TOKEN)
                         .content(body))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.id").value(shareId.toString()))
@@ -93,12 +112,15 @@ class ShareControllerTest {
 
     @Test
     void startShare_missingLabel_returns400() throws Exception {
+        UUID publisherId = UUID.randomUUID();
+        stubAuthenticatedParticipant(publisherId);
         String body = """
                 {"roomId":"%s","publisherParticipantId":"%s","appliedPresetId":null}
-                """.formatted(UUID.randomUUID(), UUID.randomUUID());
+                """.formatted(UUID.randomUUID(), publisherId);
 
         mockMvc.perform(post("/api/shares")
                         .contentType(MediaType.APPLICATION_JSON)
+                        .header("Authorization", "Bearer " + TEST_TOKEN)
                         .content(body))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.status").value(400));

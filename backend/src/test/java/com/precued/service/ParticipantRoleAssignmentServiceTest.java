@@ -8,6 +8,9 @@ import com.precued.entity.User;
 import com.precued.repository.ParticipantRoleAssignmentRepository;
 import com.precued.repository.RoomParticipantRepository;
 import com.precued.repository.RoomRoleRepository;
+import com.precued.security.CurrentParticipantContext;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
@@ -43,6 +46,20 @@ class ParticipantRoleAssignmentServiceTest {
     private final UUID roomId = UUID.randomUUID();
     private final UUID participantId = UUID.randomUUID();
     private final UUID roleId = UUID.randomUUID();
+
+    @BeforeEach
+    void authenticateAsSelf() {
+        // All three tests below have participantId assign their own role —
+        // matches every real caller (self-assign only, enforced in the service).
+        RoomParticipant self = new RoomParticipant();
+        self.setId(participantId);
+        CurrentParticipantContext.set(self);
+    }
+
+    @AfterEach
+    void clearAuthentication() {
+        CurrentParticipantContext.clear();
+    }
 
     private RoomParticipant participantWithUser(User user) {
         Room room = new Room();
@@ -111,5 +128,29 @@ class ParticipantRoleAssignmentServiceTest {
         assertThat(service.assign(participantId, roleId)).isNotNull();
 
         verify(engine).recomputeAndPushForRoom(roomId);
+    }
+
+    @Test
+    void assign_toAnotherParticipant_rejectsAndDoesNotCreateAssignment() {
+        service = new ParticipantRoleAssignmentService(
+                assignmentRepository, roomParticipantRepository, roomRoleRepository, engine);
+
+        RoomParticipant target = participantWithUser(null);
+        when(roomParticipantRepository.findById(participantId)).thenReturn(Optional.of(target));
+        RoomRole role = new RoomRole();
+        role.setId(roleId);
+        when(roomRoleRepository.findById(roleId)).thenReturn(Optional.of(role));
+
+        // Authenticated as someone other than the target participantId.
+        RoomParticipant someoneElse = new RoomParticipant();
+        someoneElse.setId(UUID.randomUUID());
+        CurrentParticipantContext.set(someoneElse);
+
+        assertThatThrownBy(() -> service.assign(participantId, roleId))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("Cannot assign a role to another participant");
+
+        verify(assignmentRepository, never()).save(any());
+        verify(engine, never()).recomputeAndPushForRoom(any());
     }
 }

@@ -54,6 +54,22 @@ class RoomParticipantServiceTest {
     }
 
     @Test
+    void join_newParticipant_issuesAUniqueSessionToken() {
+        Room room = new Room();
+        room.setId(roomId);
+        when(roomRepository.findById(roomId)).thenReturn(Optional.of(room));
+        when(roomParticipantRepository.save(org.mockito.ArgumentMatchers.any(RoomParticipant.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        RoomParticipant first = service.join(roomId, null, "Guest One");
+        RoomParticipant second = service.join(roomId, null, "Guest Two");
+
+        assertThat(first.getSessionToken()).isNotBlank();
+        assertThat(second.getSessionToken()).isNotBlank();
+        assertThat(first.getSessionToken()).isNotEqualTo(second.getSessionToken());
+    }
+
+    @Test
     void listWithGrants_participantWithActiveRoleAndGrant_includesRoleAndGrantIds() {
         when(roomRepository.existsById(roomId)).thenReturn(true);
         RoomParticipant participant = participant("viewer-1");

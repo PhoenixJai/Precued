@@ -13,6 +13,7 @@ import type {
   TemplateId,
   TemplatePreset,
 } from "../types/precued";
+import { getParticipant } from "./session";
 
 const API_BASE = import.meta.env.VITE_API_BASE ?? "";
 
@@ -23,10 +24,16 @@ type ProblemDetail = {
 };
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  // Every request scoped to a Room or to acting as a participant needs this
+  // (see ParticipantSessionInterceptor, backend). Endpoints reachable before
+  // a session exists (auth, room creation, join, templates) just won't have
+  // one in storage yet, and the backend doesn't require it for those.
+  const participant = getParticipant();
   const response = await fetch(`${API_BASE}${path}`, {
     ...init,
     headers: {
       "Content-Type": "application/json",
+      ...(participant ? { Authorization: `Bearer ${participant.sessionToken}` } : {}),
       ...(init?.headers ?? {}),
     },
   });

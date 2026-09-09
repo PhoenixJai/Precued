@@ -7,6 +7,7 @@ import com.precued.entity.RoomRole;
 import com.precued.repository.ParticipantRoleAssignmentRepository;
 import com.precued.repository.RoomParticipantRepository;
 import com.precued.repository.RoomRoleRepository;
+import com.precued.security.CurrentParticipantContext;
 import org.springframework.stereotype.Service;
 
 import java.time.Instant;
@@ -51,6 +52,11 @@ public class ParticipantRoleAssignmentService {
                 .orElseThrow(() -> new IllegalArgumentException(
                         "No ParticipantRoleAssignment with id " + assignmentId));
 
+        UUID ownerId = assignment.getRoomParticipant().getId();
+        if (!CurrentParticipantContext.get().getId().equals(ownerId)) {
+            throw new IllegalStateException("Cannot revoke another participant's role assignment");
+        }
+
         assignment.setRevokedAt(Instant.now());
         ParticipantRoleAssignment saved = assignmentRepository.save(assignment);
 
@@ -72,6 +78,10 @@ public class ParticipantRoleAssignmentService {
                         "No RoomParticipant with id " + roomParticipantId));
         RoomRole role = roomRoleRepository.findById(roomRoleId)
                 .orElseThrow(() -> new IllegalArgumentException("No RoomRole with id " + roomRoleId));
+
+        if (!CurrentParticipantContext.get().getId().equals(roomParticipantId)) {
+            throw new IllegalStateException("Cannot assign a role to another participant");
+        }
 
         if (role.isHostRole() && participant.getUser() == null) {
             throw new IllegalStateException(

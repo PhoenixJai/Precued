@@ -56,8 +56,9 @@ export default function TemplatePickerPage() {
 
       const displayName = auth.email.split("@")[0] || "Sales Rep";
       const participant = await api.joinRoom(room.id, displayName, auth.userId);
-      await api.assignRole(participant.id, hostRole.id);
-
+      // Save before assignRole: that call requires the session this join
+      // just issued (ParticipantSessionInterceptor, backend), read from
+      // storage on every request via lib/api.ts's request().
       saveParticipant({
         id: participant.id,
         roomId: room.id,
@@ -67,7 +68,9 @@ export default function TemplatePickerPage() {
         isHost: true,
         displayName: participant.displayName,
         userId: auth.userId,
+        sessionToken: participant.sessionToken,
       });
+      await api.assignRole(participant.id, hostRole.id);
 
       navigate(`/rooms/${room.id}/setup`);
     } catch (err) {
