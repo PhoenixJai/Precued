@@ -65,6 +65,7 @@ public class ShareLifecycleService {
      * a fresh compute+push for it — no prior state, per the trigger table.
      * Rejects a publisher who does not currently hold a host role.
      */
+    @Transactional
     public Share start(UUID roomId, UUID publisherParticipantId, UUID appliedPresetId, String label) {
         RoomParticipant publisher = roomParticipantRepository.findById(publisherParticipantId)
                 .orElseThrow(() -> new IllegalArgumentException(

@@ -17,6 +17,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 import retrofit2.Response;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.io.IOException;
 import java.util.LinkedHashSet;
@@ -216,15 +217,17 @@ public class VisibilityEngineImpl implements VisibilityEngine {
         }
     }
 
-    @Override
-    public void recomputeAndPushForShare(UUID shareId) {
-        Share share = shareRepository.findById(shareId)
-                .orElseThrow(() -> new IllegalArgumentException("No Share with id " + shareId));
-        recomputeAndPushForPublisher(share.getPublisher().getId());
-    }
+        @Override
+        @Transactional
+        public void recomputeAndPushForShare(UUID shareId) {
+                Share share = shareRepository.findById(shareId)
+                        .orElseThrow(() -> new IllegalArgumentException("No Share with id " + shareId));
+                recomputeAndPushForPublisher(share.getPublisher().getId());
+        }
 
-    @Override
-    public void recomputeAndPushForRoom(UUID roomId) {
+        @Override
+        @Transactional
+        public void recomputeAndPushForRoom(UUID roomId) {
         // Each publisher's push is isolated: one publisher's push failing
         // (bad LiveKit response, IO error) must not stop the others in the
         // same room from getting their recompute — same
