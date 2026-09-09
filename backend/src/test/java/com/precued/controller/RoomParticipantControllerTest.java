@@ -3,6 +3,7 @@ package com.precued.controller;
 import com.precued.controller.dto.LiveKitTokenResponse;
 import com.precued.entity.Room;
 import com.precued.entity.RoomParticipant;
+import com.precued.repository.RoomParticipantRepository;
 import com.precued.service.LiveKitTokenService;
 import com.precued.service.RoomParticipantService;
 import org.junit.jupiter.api.Test;
@@ -13,6 +14,7 @@ import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 
 import java.time.Instant;
+import java.util.Optional;
 import java.util.UUID;
 
 import static org.mockito.ArgumentMatchers.eq;
@@ -29,6 +31,19 @@ class RoomParticipantControllerTest {
     @Autowired private MockMvc mockMvc;
     @MockBean private RoomParticipantService roomParticipantService;
     @MockBean private LiveKitTokenService liveKitTokenService;
+    @MockBean private RoomParticipantRepository roomParticipantRepository;
+
+    private static final String TEST_TOKEN = "test-session-token";
+
+    /** Stubs a valid session for exactly this participant — required to act on /livekit-token as yourself. */
+    private void stubAuthenticatedParticipant(UUID participantId) {
+        RoomParticipant self = new RoomParticipant();
+        self.setId(participantId);
+        Room room = new Room();
+        room.setId(UUID.randomUUID());
+        self.setRoom(room);
+        when(roomParticipantRepository.findBySessionToken(TEST_TOKEN)).thenReturn(Optional.of(self));
+    }
 
     @Test
     void join_guestNoUserId_returns201() throws Exception {
@@ -93,8 +108,10 @@ class RoomParticipantControllerTest {
         LiveKitTokenResponse response =
                 new LiveKitTokenResponse("signed-jwt-value", "wss://precued.livekit.cloud", "room-42", "identity-1");
         when(liveKitTokenService.issueToken(participantId)).thenReturn(response);
+        stubAuthenticatedParticipant(participantId);
 
-        mockMvc.perform(get("/api/room-participants/{id}/livekit-token", participantId))
+        mockMvc.perform(get("/api/room-participants/{id}/livekit-token", participantId)
+                        .header("Authorization", "Bearer " + TEST_TOKEN))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.token").value("signed-jwt-value"))
                 .andExpect(jsonPath("$.livekitUrl").value("wss://precued.livekit.cloud"))
@@ -107,8 +124,10 @@ class RoomParticipantControllerTest {
         UUID participantId = UUID.randomUUID();
         when(liveKitTokenService.issueToken(participantId))
                 .thenThrow(new IllegalArgumentException("No RoomParticipant with id " + participantId));
+        stubAuthenticatedParticipant(participantId);
 
-        mockMvc.perform(get("/api/room-participants/{id}/livekit-token", participantId))
+        mockMvc.perform(get("/api/room-participants/{id}/livekit-token", participantId)
+                        .header("Authorization", "Bearer " + TEST_TOKEN))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.status").value(404));
     }

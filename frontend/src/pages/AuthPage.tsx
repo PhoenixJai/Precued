@@ -60,7 +60,9 @@ export default function AuthPage() {
         throw new Error("This invite link does not resolve to a guest role.");
       }
       const participant = await api.joinRoom(roomId, guestName.trim(), null);
-      await api.assignRole(participant.id, role.id);
+      // Save before assignRole: that call requires the session this join
+      // just issued (ParticipantSessionInterceptor, backend), read from
+      // storage on every request via lib/api.ts's request().
       saveParticipant({
         id: participant.id,
         roomId,
@@ -70,7 +72,9 @@ export default function AuthPage() {
         isHost: false,
         displayName: participant.displayName,
         userId: null,
+        sessionToken: participant.sessionToken,
       });
+      await api.assignRole(participant.id, role.id);
       navigate(`/rooms/${roomId}/call`);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to join room");

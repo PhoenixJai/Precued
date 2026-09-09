@@ -6,12 +6,11 @@ import com.precued.entity.User;
 import com.precued.repository.AuthSessionRepository;
 import com.precued.repository.MagicLinkTokenRepository;
 import com.precued.repository.UserRepository;
+import com.precued.util.OpaqueTokenGenerator;
 import org.springframework.stereotype.Service;
 
-import java.security.SecureRandom;
 import java.time.Duration;
 import java.time.Instant;
-import java.util.Base64;
 
 /**
  * Hybrid auth per Issue #1's resolution: magic link required for host-role
@@ -33,8 +32,6 @@ import java.util.Base64;
  */
 @Service
 public class AuthService {
-
-    private static final SecureRandom SECURE_RANDOM = new SecureRandom();
 
     /** Short-lived by design — standard magic-link practice (e.g. 15 min). */
     private static final Duration MAGIC_LINK_TTL = Duration.ofMinutes(15);
@@ -59,7 +56,7 @@ public class AuthService {
     public MagicLinkToken generateMagicLink(String email) {
         MagicLinkToken magicLink = new MagicLinkToken();
         magicLink.setEmail(email);
-        magicLink.setToken(generateOpaqueToken());
+        magicLink.setToken(OpaqueTokenGenerator.generate());
         magicLink.setCreatedAt(Instant.now());
         magicLink.setExpiresAt(Instant.now().plus(MAGIC_LINK_TTL));
         return magicLinkTokenRepository.save(magicLink);
@@ -96,7 +93,7 @@ public class AuthService {
 
         AuthSession session = new AuthSession();
         session.setUser(user);
-        session.setToken(generateOpaqueToken());
+        session.setToken(OpaqueTokenGenerator.generate());
         session.setCreatedAt(Instant.now());
         session.setExpiresAt(Instant.now().plus(SESSION_TTL));
         return authSessionRepository.save(session);
@@ -108,9 +105,4 @@ public class AuthService {
         return at > 0 ? email.substring(0, at) : email;
     }
 
-    private static String generateOpaqueToken() {
-        byte[] bytes = new byte[32];
-        SECURE_RANDOM.nextBytes(bytes);
-        return Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
-    }
 }

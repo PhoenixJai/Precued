@@ -48,5 +48,14 @@ public class RoomParticipant {
     @Column(name = "left_at")
     private Instant leftAt;
 
+    /**
+     * Opaque bearer credential issued at join time (RoomParticipantService.join).
+     * Presented as "Authorization: Bearer <token>" on every subsequent request
+     * scoped to this participant or their Room — see ParticipantSessionInterceptor.
+     * Nullable only because rows created before this column existed have none.
+     */
+    @Column(name = "session_token", unique = true)
+    private String sessionToken;
+
     public enum AccessLevel { HOST, MEMBER }
 }

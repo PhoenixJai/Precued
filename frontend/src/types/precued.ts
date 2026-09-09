@@ -48,6 +48,8 @@ export interface RoomParticipant {
   displayName: string;
   accessLevel: AccessLevel;
   joinedAt: string;
+  /** Bearer credential for every subsequent request scoped to this participant or their Room. */
+  sessionToken: string;
 }
 
 export interface RoomParticipantWithGrants extends RoomParticipant {
@@ -113,6 +115,8 @@ export interface StoredParticipant {
   isHost: boolean;
   displayName: string;
   userId: string | null;
+  /** Sent as "Authorization: Bearer <sessionToken>" on every request — see lib/api.ts. */
+  sessionToken: string;
 }
 
 export interface VisibilityGrantMessage {

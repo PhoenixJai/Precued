@@ -5,6 +5,14 @@ import com.precued.entity.RoomParticipant;
 import java.time.Instant;
 import java.util.UUID;
 
+/**
+ * sessionToken is the bearer credential the caller must send as
+ * "Authorization: Bearer <token>" on every subsequent request scoped to this
+ * participant or their Room (see ParticipantSessionInterceptor). This is the
+ * ONLY response DTO that carries it — never add it to a DTO used to list
+ * OTHER participants (e.g. RoomParticipantWithGrantsResponse), or every
+ * viewer in a room would be handed everyone else's credentials.
+ */
 public record RoomParticipantResponse(
         UUID id,
         UUID roomId,
@@ -12,7 +20,8 @@ public record RoomParticipantResponse(
         String livekitIdentity,
         String displayName,
         RoomParticipant.AccessLevel accessLevel,
-        Instant joinedAt) {
+        Instant joinedAt,
+        String sessionToken) {
 
     public static RoomParticipantResponse from(RoomParticipant participant) {
         return new RoomParticipantResponse(
@@ -22,6 +31,7 @@ public record RoomParticipantResponse(
                 participant.getLivekitIdentity(),
                 participant.getDisplayName(),
                 participant.getAccessLevel(),
-                participant.getJoinedAt());
+                participant.getJoinedAt(),
+                participant.getSessionToken());
     }
 }
