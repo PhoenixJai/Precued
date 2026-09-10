@@ -68,12 +68,18 @@ export const api = {
     });
   },
 
-  createRoom(templateId: TemplateId, createdByUserId: string) {
+  /**
+   * authSessionToken (from getAuthSession()) is the ONLY thing that
+   * determines who this room is created by — the backend derives
+   * createdByUserId from it (AuthSessionInterceptor), never from a body
+   * field, since a body field was the original vulnerability.
+   */
+  createRoom(templateId: TemplateId, authSessionToken: string) {
     return request<Room>("/api/rooms", {
       method: "POST",
+      headers: { Authorization: `Bearer ${authSessionToken}` },
       body: JSON.stringify({
         templateId,
-        createdByUserId,
         hostDisconnectPolicy: "END_CALL",
       }),
     });
@@ -91,9 +97,15 @@ export const api = {
     return request<RoomParticipantWithGrants[]>(`/api/rooms/${roomId}/room-participants`);
   },
 
-  joinRoom(roomId: string, displayName: string, userId: string | null) {
+  /**
+   * authSessionToken is required whenever userId is non-null — the backend
+   * rejects a userId claim with no matching AuthSession behind it. A guest
+   * join (userId null) omits it.
+   */
+  joinRoom(roomId: string, displayName: string, userId: string | null, authSessionToken?: string) {
     return request<RoomParticipant>("/api/room-participants", {
       method: "POST",
+      headers: authSessionToken ? { Authorization: `Bearer ${authSessionToken}` } : undefined,
       body: JSON.stringify({ roomId, userId, displayName }),
     });
   },

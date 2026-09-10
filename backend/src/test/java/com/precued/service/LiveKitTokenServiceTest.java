@@ -76,6 +76,34 @@ class LiveKitTokenServiceTest {
         assertThat(payload.get("video").get("roomJoin").asBoolean()).isTrue();
     }
 
+    /**
+     * canPublishData must never be granted to a participant token: the only
+     * legitimate sender of a visibility-grants data message is the backend
+     * itself, via RoomServiceClient's server API (VisibilityEngineImpl), not
+     * a client token. A participant token that could publish data could
+     * forge that message to every other client in the room.
+     */
+    @Test
+    void issueToken_neverGrantsCanPublishData() throws Exception {
+        Room room = new Room();
+        room.setId(UUID.randomUUID());
+        room.setLivekitRoomName("room-42");
+
+        RoomParticipant participant = new RoomParticipant();
+        participant.setId(participantId);
+        participant.setRoom(room);
+        participant.setLivekitIdentity("identity-1");
+        participant.setDisplayName("Jordan");
+        when(roomParticipantRepository.findById(participantId)).thenReturn(Optional.of(participant));
+        when(roomRepository.findById(room.getId())).thenReturn(Optional.of(room));
+
+        LiveKitTokenResponse response = service.issueToken(participantId);
+
+        String[] segments = response.token().split("\\.");
+        JsonNode video = objectMapper.readTree(Base64.getUrlDecoder().decode(segments[1])).get("video");
+        assertThat(video.get("canPublishData").asBoolean()).isFalse();
+    }
+
     @Test
     void issueToken_unknownParticipant_throwsIllegalArgumentException() {
         when(roomParticipantRepository.findById(participantId)).thenReturn(Optional.empty());

@@ -3,6 +3,7 @@ package com.precued.controller;
 import com.precued.controller.dto.LiveKitTokenResponse;
 import com.precued.entity.Room;
 import com.precued.entity.RoomParticipant;
+import com.precued.repository.AuthSessionRepository;
 import com.precued.repository.RoomParticipantRepository;
 import com.precued.service.LiveKitTokenService;
 import com.precued.service.RoomParticipantService;
@@ -19,6 +20,8 @@ import java.util.UUID;
 
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -32,6 +35,7 @@ class RoomParticipantControllerTest {
     @MockBean private RoomParticipantService roomParticipantService;
     @MockBean private LiveKitTokenService liveKitTokenService;
     @MockBean private RoomParticipantRepository roomParticipantRepository;
+    @MockBean private AuthSessionRepository authSessionRepository;
 
     private static final String TEST_TOKEN = "test-session-token";
 
@@ -100,6 +104,32 @@ class RoomParticipantControllerTest {
         mockMvc.perform(post("/api/room-participants").contentType(MediaType.APPLICATION_JSON).content(body))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.status").value(404));
+    }
+
+    /**
+     * AuthSessionInterceptor can't require a token on this path (a guest
+     * join legitimately sends none), but a token that IS present must still
+     * resolve — this is the one auth-session behavior on this endpoint
+     * that's actually observable at the controller layer, since whether a
+     * userId claim required one at all is decided inside the (here, mocked)
+     * service — see RoomParticipantServiceTest for that.
+     */
+    @Test
+    void join_invalidAuthorizationToken_returns401AndNeverCallsService() throws Exception {
+        when(authSessionRepository.findByToken("bogus-token")).thenReturn(Optional.empty());
+        String body = """
+                {"roomId":"%s","displayName":"Guest"}
+                """.formatted(UUID.randomUUID());
+
+        mockMvc.perform(post("/api/room-participants")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .header("Authorization", "Bearer bogus-token")
+                        .content(body))
+                .andExpect(status().isUnauthorized());
+
+        verify(roomParticipantService, never()).join(
+                org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any(),
+                org.mockito.ArgumentMatchers.any());
     }
 
     @Test

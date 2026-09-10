@@ -3,6 +3,7 @@ package com.precued.controller;
 import com.precued.entity.AuthSession;
 import com.precued.entity.MagicLinkToken;
 import com.precued.entity.User;
+import com.precued.repository.AuthSessionRepository;
 import com.precued.repository.RoomParticipantRepository;
 import com.precued.service.AuthService;
 import org.junit.jupiter.api.Test;
@@ -26,10 +27,12 @@ class AuthControllerTest {
 
     @Autowired private MockMvc mockMvc;
     @MockBean private AuthService authService;
-    // /api/auth/** is excluded from ParticipantSessionInterceptor, but the
-    // interceptor bean (wired via WebMvcConfig, which @WebMvcTest picks up)
-    // still needs this dependency satisfied for the context to load.
+    // /api/auth/** is excluded from ParticipantSessionInterceptor and never
+    // reaches AuthSessionInterceptor either, but WebMvcConfig (which
+    // @WebMvcTest picks up) wires both interceptor beans regardless, so
+    // both repositories must be mockable for the context to load.
     @MockBean private RoomParticipantRepository roomParticipantRepository;
+    @MockBean private AuthSessionRepository authSessionRepository;
 
     @Test
     void requestMagicLink_validEmail_returns202WithoutToken() throws Exception {

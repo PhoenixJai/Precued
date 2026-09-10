@@ -10,6 +10,8 @@ import com.precued.repository.RoomRoleRepository;
 import com.precued.repository.TemplateRepository;
 import com.precued.repository.TemplateRoleRepository;
 import com.precued.repository.UserRepository;
+import com.precued.security.CurrentUserContext;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -22,6 +24,7 @@ import java.util.Optional;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -32,7 +35,9 @@ import static org.mockito.Mockito.when;
  * referenced live." Regression coverage for a real bug found via live
  * testing — room creation saved the Room but never created any RoomRole
  * rows at all, leaving every room with zero roles and no way to ever
- * assign a host.
+ * assign a host. Also covers the fix for the userId-spoofing vulnerability:
+ * the room's creator comes only from CurrentUserContext (the caller's
+ * AuthSession), never a parameter the caller could set to any value.
  */
 @ExtendWith(MockitoExtension.class)
 class RoomServiceTest {
@@ -59,13 +64,21 @@ class RoomServiceTest {
 
         User user = new User();
         user.setId(userId);
-        when(userRepository.findById(userId)).thenReturn(Optional.of(user));
+        // lenient: create_noAuthenticatedUserInContext_throwsIllegalState
+        // clears the context and never reaches either of these.
+        org.mockito.Mockito.lenient().when(userRepository.findById(userId)).thenReturn(Optional.of(user));
+        CurrentUserContext.set(user);
 
-        when(roomRepository.save(any(Room.class))).thenAnswer(invocation -> {
+        org.mockito.Mockito.lenient().when(roomRepository.save(any(Room.class))).thenAnswer(invocation -> {
             Room room = invocation.getArgument(0);
             room.setId(UUID.randomUUID());
             return room;
         });
+    }
+
+    @AfterEach
+    void clearContext() {
+        CurrentUserContext.clear();
     }
 
     @Test
@@ -76,7 +89,7 @@ class RoomServiceTest {
         when(templateRoleRepository.findByTemplateIdOrderBySortOrder(templateId))
                 .thenReturn(List.of(salesRep, prospect, observer));
 
-        Room room = service.create(templateId, userId, null);
+        Room room = service.create(templateId, null);
 
         ArgumentCaptor<List<RoomRole>> captor = ArgumentCaptor.forClass(List.class);
         verify(roomRoleRepository).saveAll(captor.capture());
@@ -112,11 +125,34 @@ class RoomServiceTest {
     void create_templateWithNoRoles_savesEmptyRoomRoleList() {
         when(templateRoleRepository.findByTemplateIdOrderBySortOrder(templateId)).thenReturn(List.of());
 
-        service.create(templateId, userId, null);
+        service.create(templateId, null);
 
         ArgumentCaptor<List<RoomRole>> captor = ArgumentCaptor.forClass(List.class);
         verify(roomRoleRepository).saveAll(captor.capture());
         assertThat(captor.getValue()).isEmpty();
+    }
+
+    /**
+     * The actual fix for the userId-spoofing vulnerability: create() takes
+     * no userId parameter at all now, so there's nothing for a caller to
+     * override — the creator is always whoever CurrentUserContext says
+     * authenticated this request.
+     */
+    @Test
+    void create_setsCreatedByFromCurrentUserContext() {
+        when(templateRoleRepository.findByTemplateIdOrderBySortOrder(templateId)).thenReturn(List.of());
+
+        Room room = service.create(templateId, null);
+
+        assertThat(room.getCreatedBy().getId()).isEqualTo(userId);
+    }
+
+    @Test
+    void create_noAuthenticatedUserInContext_throwsIllegalState() {
+        CurrentUserContext.clear();
+
+        assertThatThrownBy(() -> service.create(templateId, null))
+                .isInstanceOf(IllegalStateException.class);
     }
 
     private TemplateRole templateRole(String roleKey, String name, boolean isHostRole, Integer maxMembers) {

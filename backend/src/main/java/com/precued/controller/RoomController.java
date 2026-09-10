@@ -21,12 +21,6 @@ import org.springframework.web.bind.annotation.RestController;
 import java.util.List;
 import java.util.UUID;
 
-/**
- * TEMPORARY: no auth/session enforcement yet. createdByUserId is accepted
- * directly from the request body and trusted as-is. This will be replaced
- * once auth exists — do not treat this as the final contract for who is
- * allowed to create a Room.
- */
 @RestController
 @RequestMapping("/api/rooms")
 public class RoomController {
@@ -47,8 +41,7 @@ public class RoomController {
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
     public RoomResponse create(@Valid @RequestBody CreateRoomRequest request) {
-        return RoomResponse.from(
-                roomService.create(request.templateId(), request.createdByUserId(), request.hostDisconnectPolicy()));
+        return RoomResponse.from(roomService.create(request.templateId(), request.hostDisconnectPolicy()));
     }
 
     @GetMapping("/{id}")

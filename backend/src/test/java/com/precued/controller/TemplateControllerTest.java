@@ -1,6 +1,7 @@
 package com.precued.controller;
 
 import com.precued.controller.dto.TemplatePresetResponse;
+import com.precued.repository.AuthSessionRepository;
 import com.precued.repository.RoomParticipantRepository;
 import com.precued.service.TemplatePresetService;
 import org.junit.jupiter.api.Test;
@@ -22,10 +23,12 @@ class TemplateControllerTest {
 
     @Autowired private MockMvc mockMvc;
     @MockBean private TemplatePresetService templatePresetService;
-    // /api/templates/** is excluded from ParticipantSessionInterceptor, but
-    // the interceptor bean (wired via WebMvcConfig, which @WebMvcTest picks
-    // up) still needs this dependency satisfied for the context to load.
+    // /api/templates/** is excluded from ParticipantSessionInterceptor and
+    // never reaches AuthSessionInterceptor either, but WebMvcConfig (which
+    // @WebMvcTest picks up) wires both interceptor beans regardless, so
+    // both repositories must be mockable for the context to load.
     @MockBean private RoomParticipantRepository roomParticipantRepository;
+    @MockBean private AuthSessionRepository authSessionRepository;
 
     @Test
     void listPresets_existingTemplate_returns200WithPresetsAndRoleKeys() throws Exception {

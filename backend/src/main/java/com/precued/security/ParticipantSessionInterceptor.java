@@ -6,8 +6,6 @@ import com.precued.repository.RoomParticipantRepository;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.http.HttpStatus;
-import org.springframework.http.MediaType;
-import org.springframework.http.ProblemDetail;
 import org.springframework.stereotype.Component;
 import org.springframework.web.servlet.HandlerInterceptor;
 import org.springframework.web.servlet.HandlerMapping;
@@ -34,8 +32,6 @@ import java.util.UUID;
 @Component
 public class ParticipantSessionInterceptor implements HandlerInterceptor {
 
-    private static final String BEARER_PREFIX = "Bearer ";
-
     private final RoomParticipantRepository roomParticipantRepository;
     private final ObjectMapper objectMapper;
 
@@ -48,7 +44,7 @@ public class ParticipantSessionInterceptor implements HandlerInterceptor {
     @Override
     public boolean preHandle(HttpServletRequest request, HttpServletResponse response, Object handler)
             throws IOException {
-        String token = extractToken(request);
+        String token = BearerTokenSupport.extractToken(request);
         if (token == null) {
             return reject(response, HttpStatus.UNAUTHORIZED, "Missing or malformed Authorization header");
         }
@@ -85,19 +81,7 @@ public class ParticipantSessionInterceptor implements HandlerInterceptor {
         CurrentParticipantContext.clear();
     }
 
-    private static String extractToken(HttpServletRequest request) {
-        String header = request.getHeader("Authorization");
-        if (header == null || !header.regionMatches(true, 0, BEARER_PREFIX, 0, BEARER_PREFIX.length())) {
-            return null;
-        }
-        String token = header.substring(BEARER_PREFIX.length()).trim();
-        return token.isEmpty() ? null : token;
-    }
-
     private boolean reject(HttpServletResponse response, HttpStatus status, String detail) throws IOException {
-        response.setStatus(status.value());
-        response.setContentType(MediaType.APPLICATION_PROBLEM_JSON_VALUE);
-        response.getWriter().write(objectMapper.writeValueAsString(ProblemDetail.forStatusAndDetail(status, detail)));
-        return false;
+        return BearerTokenSupport.reject(response, status, detail, objectMapper);
     }
 }

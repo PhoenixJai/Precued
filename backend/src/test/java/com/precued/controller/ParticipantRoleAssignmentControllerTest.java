@@ -4,6 +4,7 @@ import com.precued.entity.ParticipantRoleAssignment;
 import com.precued.entity.Room;
 import com.precued.entity.RoomParticipant;
 import com.precued.entity.RoomRole;
+import com.precued.repository.AuthSessionRepository;
 import com.precued.repository.RoomParticipantRepository;
 import com.precued.service.ParticipantRoleAssignmentService;
 import org.junit.jupiter.api.Test;
@@ -29,6 +30,10 @@ class ParticipantRoleAssignmentControllerTest {
     @Autowired private MockMvc mockMvc;
     @MockBean private ParticipantRoleAssignmentService assignmentService;
     @MockBean private RoomParticipantRepository roomParticipantRepository;
+    // Not exercised on this path, but WebMvcConfig (which @WebMvcTest picks
+    // up) wires AuthSessionInterceptor regardless, so this must be mockable
+    // for the context to load.
+    @MockBean private AuthSessionRepository authSessionRepository;
 
     private static final String TEST_TOKEN = "test-session-token";
 
