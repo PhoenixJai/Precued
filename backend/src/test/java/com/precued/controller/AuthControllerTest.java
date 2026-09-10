@@ -32,7 +32,7 @@ class AuthControllerTest {
     @MockBean private RoomParticipantRepository roomParticipantRepository;
 
     @Test
-    void requestMagicLink_validEmail_returns201WithToken() throws Exception {
+    void requestMagicLink_validEmail_returns202WithoutToken() throws Exception {
         MagicLinkToken token = new MagicLinkToken();
         token.setEmail("host@example.com");
         token.setToken("opaque-token-value");
@@ -42,8 +42,8 @@ class AuthControllerTest {
         mockMvc.perform(post("/api/auth/magic-link")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"email\":\"host@example.com\"}"))
-                .andExpect(status().isCreated())
-                .andExpect(jsonPath("$.token").value("opaque-token-value"))
+                .andExpect(status().isAccepted())
+                .andExpect(jsonPath("$.token").doesNotExist())
                 .andExpect(jsonPath("$.expiresAt").exists());
     }
 

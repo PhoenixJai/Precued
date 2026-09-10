@@ -16,10 +16,11 @@ import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * TEMPORARY: no real email delivery yet — /magic-link returns the token
- * directly (see MagicLinkResponse). No middleware consumes the session
- * token returned by /verify yet either; wiring host-only endpoints to
- * require a valid session is separate scope.
+ * No real email delivery yet — AuthService#generateMagicLink logs the
+ * magic-link URL server-side (INFO) instead. The token itself is never
+ * returned from /magic-link: the caller only proves they received it by
+ * successfully calling /verify with it, which is the whole point of a
+ * magic link (whoever submitted the email is not necessarily its owner).
  */
 @RestController
 @RequestMapping("/api/auth")
@@ -32,10 +33,10 @@ public class AuthController {
     }
 
     @PostMapping("/magic-link")
-    @ResponseStatus(HttpStatus.CREATED)
+    @ResponseStatus(HttpStatus.ACCEPTED)
     public MagicLinkResponse requestMagicLink(@Valid @RequestBody MagicLinkRequest request) {
         MagicLinkToken magicLink = authService.generateMagicLink(request.email());
-        return new MagicLinkResponse(magicLink.getToken(), magicLink.getExpiresAt());
+        return new MagicLinkResponse(magicLink.getExpiresAt());
     }
 
     @PostMapping("/verify")

@@ -10,7 +10,8 @@ export default function AuthPage() {
   const isInviteRoute = Boolean(roomId && roomRoleId);
   const [email, setEmail] = useState("");
   const [guestName, setGuestName] = useState("");
-  const [magicToken, setMagicToken] = useState<string | null>(null);
+  const [linkRequested, setLinkRequested] = useState(false);
+  const [magicToken, setMagicToken] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -24,8 +25,8 @@ export default function AuthPage() {
     setLoading(true);
     setError(null);
     try {
-      const response = await api.requestMagicLink(email);
-      setMagicToken(response.token);
+      await api.requestMagicLink(email);
+      setLinkRequested(true);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to request magic link");
     } finally {
@@ -34,7 +35,7 @@ export default function AuthPage() {
   }
 
   async function verifyAndContinue() {
-    if (!magicToken) return;
+    if (!magicToken.trim()) return;
     setLoading(true);
     setError(null);
     try {
@@ -106,11 +107,14 @@ export default function AuthPage() {
             </label>
             <button className="primary-button wide" disabled={loading}>{loading ? "Working..." : "Email me a magic link  →"}</button>
             <small>For Sales Rep hosts.</small>
-            {magicToken && (
+            {linkRequested && (
               <div className="demo-token-box">
-                <strong>Demo magic link token</strong>
-                <code>{magicToken}</code>
-                <button type="button" className="secondary-button" onClick={verifyAndContinue} disabled={loading}>Verify & continue</button>
+                <strong>Check your email for the magic link</strong>
+                <label>
+                  Paste the token from the link
+                  <input value={magicToken} onChange={(event) => setMagicToken(event.target.value)} placeholder="Magic link token" />
+                </label>
+                <button type="button" className="secondary-button" onClick={verifyAndContinue} disabled={loading || !magicToken.trim()}>Verify & continue</button>
               </div>
             )}
           </form>

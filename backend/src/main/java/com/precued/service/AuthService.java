@@ -7,6 +7,9 @@ import com.precued.repository.AuthSessionRepository;
 import com.precued.repository.MagicLinkTokenRepository;
 import com.precued.repository.UserRepository;
 import com.precued.util.OpaqueTokenGenerator;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import java.time.Duration;
@@ -33,6 +36,8 @@ import java.time.Instant;
 @Service
 public class AuthService {
 
+    private static final Logger log = LoggerFactory.getLogger(AuthService.class);
+
     /** Short-lived by design — standard magic-link practice (e.g. 15 min). */
     private static final Duration MAGIC_LINK_TTL = Duration.ofMinutes(15);
 
@@ -42,24 +47,38 @@ public class AuthService {
     private final MagicLinkTokenRepository magicLinkTokenRepository;
     private final AuthSessionRepository authSessionRepository;
     private final UserRepository userRepository;
+    private final String magicLinkBaseUrl;
 
     public AuthService(
             MagicLinkTokenRepository magicLinkTokenRepository,
             AuthSessionRepository authSessionRepository,
-            UserRepository userRepository) {
+            UserRepository userRepository,
+            @Value("${precued.auth.magic-link.base-url}") String magicLinkBaseUrl) {
         this.magicLinkTokenRepository = magicLinkTokenRepository;
         this.authSessionRepository = authSessionRepository;
         this.userRepository = userRepository;
+        this.magicLinkBaseUrl = magicLinkBaseUrl;
     }
 
-    /** Step 1: generate + store only. Never sends anything. */
+    /**
+     * Step 1: generate + store only, then log the link server-side.
+     * Never returns or otherwise exposes the token to the HTTP caller —
+     * see AuthController's Javadoc for why (the requester and the email's
+     * owner are not necessarily the same person). Logging stands in for
+     * real email delivery (separate scope, spring-boot-starter-mail is
+     * already a dependency for when that lands).
+     */
     public MagicLinkToken generateMagicLink(String email) {
         MagicLinkToken magicLink = new MagicLinkToken();
         magicLink.setEmail(email);
         magicLink.setToken(OpaqueTokenGenerator.generate());
         magicLink.setCreatedAt(Instant.now());
         magicLink.setExpiresAt(Instant.now().plus(MAGIC_LINK_TTL));
-        return magicLinkTokenRepository.save(magicLink);
+        MagicLinkToken saved = magicLinkTokenRepository.save(magicLink);
+
+        log.info("Magic link for {}: {}?token={}", email, magicLinkBaseUrl, saved.getToken());
+
+        return saved;
     }
 
     /**
