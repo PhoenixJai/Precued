@@ -1,5 +1,6 @@
 package com.precued.controller;
 
+import com.precued.security.AuthenticationRequiredException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
 import org.springframework.http.converter.HttpMessageNotReadableException;
@@ -21,6 +22,12 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(IllegalArgumentException.class)
     public ProblemDetail handleNotFound(IllegalArgumentException e) {
         return ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, e.getMessage());
+    }
+
+    /** "We don't know who you are" — a body field claimed a User identity with no AuthSession to back it. */
+    @ExceptionHandler(AuthenticationRequiredException.class)
+    public ProblemDetail handleAuthenticationRequired(AuthenticationRequiredException e) {
+        return ProblemDetail.forStatusAndDetail(HttpStatus.UNAUTHORIZED, e.getMessage());
     }
 
     /** The request is well-formed but violates a business rule (e.g. missing host role). */

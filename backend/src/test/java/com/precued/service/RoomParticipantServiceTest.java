@@ -7,11 +7,15 @@ import com.precued.entity.RoomParticipant;
 import com.precued.entity.RoomRole;
 import com.precued.entity.Share;
 import com.precued.entity.ShareRoleGrant;
+import com.precued.entity.User;
 import com.precued.repository.ParticipantRoleAssignmentRepository;
 import com.precued.repository.RoomParticipantRepository;
 import com.precued.repository.RoomRepository;
 import com.precued.repository.ShareRoleGrantRepository;
 import com.precued.repository.UserRepository;
+import com.precued.security.AuthenticationRequiredException;
+import com.precued.security.CurrentUserContext;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -24,6 +28,8 @@ import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 /**
@@ -51,6 +57,63 @@ class RoomParticipantServiceTest {
         service = new RoomParticipantService(
                 roomParticipantRepository, roomRepository, userRepository, assignmentRepository,
                 shareRoleGrantRepository);
+    }
+
+    @AfterEach
+    void clearContext() {
+        CurrentUserContext.clear();
+    }
+
+    @Test
+    void join_userIdWithoutAuthenticatedSession_throwsAuthenticationRequiredException() {
+        UUID roomId = UUID.randomUUID();
+        UUID userId = UUID.randomUUID();
+        Room room = new Room();
+        room.setId(roomId);
+        when(roomRepository.findById(roomId)).thenReturn(Optional.of(room));
+
+        assertThatThrownBy(() -> service.join(roomId, userId, "Host"))
+                .isInstanceOf(AuthenticationRequiredException.class);
+
+        verify(roomParticipantRepository, never()).save(org.mockito.ArgumentMatchers.any());
+    }
+
+    @Test
+    void join_userIdDoesNotMatchAuthenticatedSession_throwsIllegalState() {
+        UUID roomId = UUID.randomUUID();
+        UUID claimedUserId = UUID.randomUUID();
+        Room room = new Room();
+        room.setId(roomId);
+        when(roomRepository.findById(roomId)).thenReturn(Optional.of(room));
+
+        User authenticated = new User();
+        authenticated.setId(UUID.randomUUID()); // different from claimedUserId
+        CurrentUserContext.set(authenticated);
+
+        assertThatThrownBy(() -> service.join(roomId, claimedUserId, "Host"))
+                .isInstanceOf(IllegalStateException.class);
+
+        verify(roomParticipantRepository, never()).save(org.mockito.ArgumentMatchers.any());
+    }
+
+    @Test
+    void join_userIdMatchesAuthenticatedSession_linksUser() {
+        UUID roomId = UUID.randomUUID();
+        UUID userId = UUID.randomUUID();
+        Room room = new Room();
+        room.setId(roomId);
+        when(roomRepository.findById(roomId)).thenReturn(Optional.of(room));
+
+        User user = new User();
+        user.setId(userId);
+        when(userRepository.findById(userId)).thenReturn(Optional.of(user));
+        CurrentUserContext.set(user);
+        when(roomParticipantRepository.save(org.mockito.ArgumentMatchers.any(RoomParticipant.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        RoomParticipant participant = service.join(roomId, userId, "Host");
+
+        assertThat(participant.getUser()).isSameAs(user);
     }
 
     @Test

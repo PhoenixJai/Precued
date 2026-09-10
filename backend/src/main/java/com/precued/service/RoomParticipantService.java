@@ -12,6 +12,8 @@ import com.precued.repository.RoomParticipantRepository;
 import com.precued.repository.RoomRepository;
 import com.precued.repository.ShareRoleGrantRepository;
 import com.precued.repository.UserRepository;
+import com.precued.security.AuthenticationRequiredException;
+import com.precued.security.CurrentUserContext;
 import com.precued.util.OpaqueTokenGenerator;
 import org.springframework.stereotype.Service;
 
@@ -23,7 +25,9 @@ import java.util.UUID;
 /**
  * Minimal room-join: creates a RoomParticipant directly from a room_id, with
  * no invite-token consumption or role assignment — that's separate scope.
- * userId is nullable for a guest join (Precued_DataModel.md's RoomParticipant.user_id).
+ * userId is nullable for a guest join (Precued_DataModel.md's
+ * RoomParticipant.user_id); a non-null userId must match the caller's
+ * AuthSession (see #join) — never trusted as a bare claim.
  */
 @Service
 public class RoomParticipantService {
@@ -50,10 +54,25 @@ public class RoomParticipantService {
     public RoomParticipant join(UUID roomId, UUID userId, String displayName) {
         Room room = roomRepository.findById(roomId)
                 .orElseThrow(() -> new IllegalArgumentException("No Room with id " + roomId));
-        User user = userId == null
-                ? null
-                : userRepository.findById(userId)
-                        .orElseThrow(() -> new IllegalArgumentException("No User with id " + userId));
+
+        User user;
+        if (userId == null) {
+            user = null;
+        } else {
+            // A non-null userId is a claim of User identity — AuthSessionInterceptor
+            // resolves the bearer token if one was sent, but can't require it
+            // itself (a guest join legitimately sends none), so this is the
+            // one place that decides whether the claim needed proof at all.
+            User authenticatedUser = CurrentUserContext.getIfPresent()
+                    .orElseThrow(() -> new AuthenticationRequiredException(
+                            "Joining as User " + userId + " requires a valid AuthSession bearer token"));
+            if (!authenticatedUser.getId().equals(userId)) {
+                throw new IllegalStateException(
+                        "Authenticated session does not match the claimed userId " + userId);
+            }
+            user = userRepository.findById(userId)
+                    .orElseThrow(() -> new IllegalArgumentException("No User with id " + userId));
+        }
 
         RoomParticipant participant = new RoomParticipant();
         participant.setRoom(room);

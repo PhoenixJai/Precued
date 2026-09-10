@@ -51,11 +51,17 @@ export interface RoomParticipant {
   sessionToken: string;
 }
 
-export interface RoomParticipantWithGrants extends RoomParticipant {
+/**
+ * Omits userId: this lists OTHER participants in the room (no host
+ * restriction on that endpoint), and another participant's internal User
+ * id has no legitimate reason to be visible to you — see
+ * RoomParticipantWithGrantsResponse (backend) for why leaking it mattered.
+ */
+export type RoomParticipantWithGrants = Omit<RoomParticipant, "userId"> & {
   leftAt: string | null;
   activeRoomRoleId: string | null;
   activeShareRoleGrantIds: string[];
-}
+};
 
 export interface ParticipantRoleAssignment {
   id: string;

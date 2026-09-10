@@ -7,6 +7,8 @@ import com.precued.entity.Template;
 import com.precued.entity.User;
 import com.precued.controller.dto.ActiveShareResponse;
 import com.precued.controller.dto.RoomParticipantWithGrantsResponse;
+import com.precued.entity.AuthSession;
+import com.precued.repository.AuthSessionRepository;
 import com.precued.repository.RoomParticipantRepository;
 import com.precued.service.RoomParticipantService;
 import com.precued.service.RoomService;
@@ -25,6 +27,8 @@ import java.util.UUID;
 
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -39,8 +43,10 @@ class RoomControllerTest {
     @MockBean private RoomParticipantService roomParticipantService;
     @MockBean private ShareLifecycleService shareLifecycleService;
     @MockBean private RoomParticipantRepository roomParticipantRepository;
+    @MockBean private AuthSessionRepository authSessionRepository;
 
     private static final String TEST_TOKEN = "test-session-token";
+    private static final String TEST_AUTH_TOKEN = "test-auth-session-token";
 
     /** Stubs a valid session whose participant belongs to the given room — required by ParticipantSessionInterceptor. */
     private void stubAuthenticatedParticipant(UUID roomId) {
@@ -50,6 +56,16 @@ class RoomControllerTest {
         participant.setId(UUID.randomUUID());
         participant.setRoom(room);
         when(roomParticipantRepository.findBySessionToken(TEST_TOKEN)).thenReturn(Optional.of(participant));
+    }
+
+    /** Stubs a valid AuthSession — required by AuthSessionInterceptor on POST /api/rooms. */
+    private void stubAuthenticatedUser() {
+        User user = new User();
+        user.setId(UUID.randomUUID());
+        AuthSession session = new AuthSession();
+        session.setUser(user);
+        session.setExpiresAt(Instant.now().plusSeconds(3600));
+        when(authSessionRepository.findByToken(TEST_AUTH_TOKEN)).thenReturn(Optional.of(session));
     }
 
     private Room roomWithId(UUID id) {
@@ -71,15 +87,18 @@ class RoomControllerTest {
 
     @Test
     void create_validRequest_returns201() throws Exception {
-        UUID userId = UUID.randomUUID();
         UUID roomId = UUID.randomUUID();
-        when(roomService.create(eq("mock_trial"), eq(userId), isNull())).thenReturn(roomWithId(roomId));
+        when(roomService.create(eq("mock_trial"), isNull())).thenReturn(roomWithId(roomId));
+        stubAuthenticatedUser();
 
         String body = """
-                {"templateId":"mock_trial","createdByUserId":"%s"}
-                """.formatted(userId);
+                {"templateId":"mock_trial"}
+                """;
 
-        mockMvc.perform(post("/api/rooms").contentType(MediaType.APPLICATION_JSON).content(body))
+        mockMvc.perform(post("/api/rooms")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .header("Authorization", "Bearer " + TEST_AUTH_TOKEN)
+                        .content(body))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.id").value(roomId.toString()))
                 .andExpect(jsonPath("$.templateId").value("mock_trial"))
@@ -88,15 +107,90 @@ class RoomControllerTest {
                 .andExpect(jsonPath("$.livekitRoomName").isNotEmpty());
     }
 
+    /**
+     * The original vulnerability: createdByUserId used to be a body field
+     * trusted as-is. It no longer exists on CreateRoomRequest at all, so
+     * even a client that still sends it has no effect — roomService.create
+     * is only ever invoked with (templateId, hostDisconnectPolicy); there's
+     * no userId parameter left to smuggle a value into.
+     */
     @Test
-    void create_missingTemplateId_returns400() throws Exception {
+    void create_bodySuppliedCreatedByUserId_hasNoEffect() throws Exception {
+        UUID roomId = UUID.randomUUID();
+        when(roomService.create(eq("mock_trial"), isNull())).thenReturn(roomWithId(roomId));
+        stubAuthenticatedUser();
+
         String body = """
-                {"createdByUserId":"%s"}
+                {"templateId":"mock_trial","createdByUserId":"%s"}
                 """.formatted(UUID.randomUUID());
 
-        mockMvc.perform(post("/api/rooms").contentType(MediaType.APPLICATION_JSON).content(body))
+        mockMvc.perform(post("/api/rooms")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .header("Authorization", "Bearer " + TEST_AUTH_TOKEN)
+                        .content(body))
+                .andExpect(status().isCreated());
+
+        verify(roomService).create(eq("mock_trial"), isNull());
+    }
+
+    @Test
+    void create_missingTemplateId_returns400() throws Exception {
+        stubAuthenticatedUser();
+        String body = "{}";
+
+        mockMvc.perform(post("/api/rooms")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .header("Authorization", "Bearer " + TEST_AUTH_TOKEN)
+                        .content(body))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.status").value(400));
+    }
+
+    @Test
+    void create_missingAuthorizationHeader_returns401() throws Exception {
+        String body = """
+                {"templateId":"mock_trial"}
+                """;
+
+        mockMvc.perform(post("/api/rooms").contentType(MediaType.APPLICATION_JSON).content(body))
+                .andExpect(status().isUnauthorized());
+
+        verify(roomService, never()).create(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any());
+    }
+
+    @Test
+    void create_invalidAuthorizationToken_returns401() throws Exception {
+        when(authSessionRepository.findByToken("bogus-token")).thenReturn(Optional.empty());
+        String body = """
+                {"templateId":"mock_trial"}
+                """;
+
+        mockMvc.perform(post("/api/rooms")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .header("Authorization", "Bearer bogus-token")
+                        .content(body))
+                .andExpect(status().isUnauthorized());
+
+        verify(roomService, never()).create(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any());
+    }
+
+    @Test
+    void create_expiredAuthorizationToken_returns401() throws Exception {
+        User user = new User();
+        user.setId(UUID.randomUUID());
+        AuthSession expired = new AuthSession();
+        expired.setUser(user);
+        expired.setExpiresAt(Instant.now().minusSeconds(1));
+        when(authSessionRepository.findByToken("expired-token")).thenReturn(Optional.of(expired));
+        String body = """
+                {"templateId":"mock_trial"}
+                """;
+
+        mockMvc.perform(post("/api/rooms")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .header("Authorization", "Bearer expired-token")
+                        .content(body))
+                .andExpect(status().isUnauthorized());
     }
 
     @Test
@@ -160,7 +254,7 @@ class RoomControllerTest {
         UUID grantId = UUID.randomUUID();
 
         RoomParticipantWithGrantsResponse response = new RoomParticipantWithGrantsResponse(
-                participantId, roomId, null, "identity-1", "Viewer", RoomParticipant.AccessLevel.MEMBER,
+                participantId, roomId, "identity-1", "Viewer", RoomParticipant.AccessLevel.MEMBER,
                 Instant.now(), null, roleId, List.of(grantId));
         when(roomParticipantService.listWithGrants(roomId)).thenReturn(List.of(response));
         stubAuthenticatedParticipant(roomId);
@@ -168,6 +262,7 @@ class RoomControllerTest {
         mockMvc.perform(get("/api/rooms/{roomId}/room-participants", roomId).header("Authorization", "Bearer " + TEST_TOKEN))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[0].id").value(participantId.toString()))
+                .andExpect(jsonPath("$[0].userId").doesNotExist())
                 .andExpect(jsonPath("$[0].activeRoomRoleId").value(roleId.toString()))
                 .andExpect(jsonPath("$[0].activeShareRoleGrantIds[0]").value(grantId.toString()));
     }

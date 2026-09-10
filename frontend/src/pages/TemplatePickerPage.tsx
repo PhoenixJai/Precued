@@ -49,13 +49,13 @@ export default function TemplatePickerPage() {
     setLoading(true);
     setError(null);
     try {
-      const room = await api.createRoom("sales_call", auth.userId);
+      const room = await api.createRoom("sales_call", auth.sessionToken);
       const roles = await api.getRoomRoles(room.id);
       const hostRole = roles.find((role) => role.roleKey === "sales_rep" && role.isHostRole);
       if (!hostRole) throw new Error("Sales Rep host role was not created for this room.");
 
       const displayName = auth.email.split("@")[0] || "Sales Rep";
-      const participant = await api.joinRoom(room.id, displayName, auth.userId);
+      const participant = await api.joinRoom(room.id, displayName, auth.userId, auth.sessionToken);
       // Save before assignRole: that call requires the session this join
       // just issued (ParticipantSessionInterceptor, backend), read from
       // storage on every request via lib/api.ts's request().

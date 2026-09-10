@@ -13,11 +13,18 @@ import java.util.UUID;
  * grant, on a still-active Share). IDs only, matching
  * ParticipantRoleAssignmentResponse / ShareRoleGrantResponse's shape
  * elsewhere — never nested lazy entities.
+ *
+ * Deliberately no userId: this DTO lists OTHER participants to anyone in
+ * the room (no host restriction on that endpoint), so it must never carry
+ * another participant's internal User id — that id is exactly what let a
+ * guest impersonate a host elsewhere (create a room, or join claiming to
+ * be them) before the callers of that identity were required to prove it
+ * via AuthSession. RoomParticipantResponse (the join response, about
+ * yourself only) still carries it; that's not a leak.
  */
 public record RoomParticipantWithGrantsResponse(
         UUID id,
         UUID roomId,
-        UUID userId,
         String livekitIdentity,
         String displayName,
         RoomParticipant.AccessLevel accessLevel,
@@ -31,7 +38,6 @@ public record RoomParticipantWithGrantsResponse(
         return new RoomParticipantWithGrantsResponse(
                 participant.getId(),
                 participant.getRoom().getId(),
-                participant.getUser() == null ? null : participant.getUser().getId(),
                 participant.getLivekitIdentity(),
                 participant.getDisplayName(),
                 participant.getAccessLevel(),

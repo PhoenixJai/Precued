@@ -11,7 +11,6 @@ function participant(overrides: Partial<RoomParticipantWithGrants> & { livekitId
   return {
     id: overrides.livekitIdentity,
     roomId: "room-1",
-    userId: null,
     displayName: overrides.livekitIdentity,
     accessLevel: "MEMBER",
     joinedAt: "2026-01-01T00:00:00Z",

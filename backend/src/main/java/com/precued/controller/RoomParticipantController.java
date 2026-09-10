@@ -17,12 +17,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.util.UUID;
 
-/**
- * TEMPORARY: no auth/session enforcement yet, and no invite-token
- * consumption (separate scope) — this just creates a RoomParticipant
- * directly from the request body's room_id/user_id. Will be replaced once
- * auth and invites exist.
- */
+/** No invite-token consumption yet — separate scope. See RoomParticipantService#join for userId's auth check. */
 @RestController
 @RequestMapping("/api/room-participants")
 public class RoomParticipantController {
