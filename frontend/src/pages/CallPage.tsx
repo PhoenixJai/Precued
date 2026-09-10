@@ -20,7 +20,11 @@ import {
   getParticipant,
   rememberGrantId,
 } from "../lib/session";
-import { isServerVisibilityGrant } from "../lib/visibilityGrants";
+import {
+  computeLocalVisibilityGrants,
+  isServerVisibilityGrant,
+  toTrackSubscriptionPermissions,
+} from "../lib/visibilityGrants";
 import type {
   ActiveShare,
   LiveKitTokenResponse,
@@ -104,6 +108,29 @@ function CallExperience({ roomId }: { roomId: string }) {
   const cameraTracks = useTracks([Track.Source.Camera], { onlySubscribed: false });
   const currentShare = activeShares[0] ?? null;
 
+  // Re-asserts subscription permissions from the just-polled REST snapshot
+  // (authenticated, unforgeable) rather than from whatever the last data
+  // message said. Runs on every poll regardless of whether a push also
+  // arrived, so the data-channel push is a latency optimization, never the
+  // trust decision — see computeLocalVisibilityGrants's doc comment.
+  const applyVisibilityPermissions = useCallback(
+    (participantsList: RoomParticipantWithGrants[], share: ActiveShare | null) => {
+      const baseTrackSids = [
+        room.localParticipant.getTrackPublication(Track.Source.Camera)?.trackSid,
+        room.localParticipant.getTrackPublication(Track.Source.Microphone)?.trackSid,
+      ].filter((sid): sid is string => Boolean(sid));
+
+      const shareTrack = share
+        ? screenTracks.find((trackRef: any) => trackRef.publication?.trackName?.startsWith(`${share.id}:`))
+        : undefined;
+      const shareTrackSids = shareTrack?.publication?.trackSid ? [shareTrack.publication.trackSid] : [];
+
+      const grants = computeLocalVisibilityGrants(participantsList, share, baseTrackSids, shareTrackSids);
+      room.localParticipant.setTrackSubscriptionPermissions(false, toTrackSubscriptionPermissions(grants));
+    },
+    [room, screenTracks],
+  );
+
   const refresh = useCallback(async () => {
     try {
       const [nextRoles, nextParticipants, nextPresets, nextShares] = await Promise.all([
@@ -117,10 +144,12 @@ function CallExperience({ roomId }: { roomId: string }) {
       setPresets([...nextPresets].sort((a, b) => a.sortOrder - b.sortOrder));
       setActiveShares(nextShares);
       setError(null);
+
+      if (me.isHost) applyVisibilityPermissions(nextParticipants, nextShares[0] ?? null);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to refresh call state");
     }
-  }, [roomId]);
+  }, [roomId, me.isHost, applyVisibilityPermissions]);
 
   useEffect(() => {
     void refresh();
@@ -164,14 +193,7 @@ function CallExperience({ roomId }: { roomId: string }) {
       if (!isServerVisibilityGrant(topic, sender) || !me.isHost) return;
       try {
         const grants = JSON.parse(new TextDecoder().decode(payload)) as VisibilityGrantMessage[];
-        room.localParticipant.setTrackSubscriptionPermissions(
-          false,
-          grants.map((grant) => ({
-            participantIdentity: grant.livekitIdentity,
-            allowAll: false,
-            allowedTrackSids: grant.allowed ? grant.trackSids : [],
-          })),
-        );
+        room.localParticipant.setTrackSubscriptionPermissions(false, toTrackSubscriptionPermissions(grants));
       } catch (err) {
         setError(err instanceof Error ? err.message : "Invalid visibility grant update");
       }
