@@ -10,7 +10,6 @@ export type AccessLevel = "HOST" | "MEMBER";
 export type ShareStatus = "ACTIVE" | "ENDED";
 
 export interface MagicLinkResponse {
-  token: string;
   expiresAt: string;
 }
 

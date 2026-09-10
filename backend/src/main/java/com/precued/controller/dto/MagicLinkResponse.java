@@ -3,11 +3,11 @@ package com.precued.controller.dto;
 import java.time.Instant;
 
 /**
- * TEMPORARY: `token` is returned directly in the response body as a
- * stand-in for actually emailing it — real delivery (spring-boot-starter-mail
- * is already a dependency, provisioned for this) is out of scope for this
- * pass. Once email delivery exists, this endpoint should stop echoing the
- * token to the caller.
+ * Deliberately carries no token — the magic-link token is a bearer
+ * credential for the recipient's email and must never appear in an API
+ * response readable by whoever submitted the email (which may not be its
+ * owner). See AuthService#generateMagicLink for where the token actually
+ * goes (logged server-side; real email delivery is separate scope).
  */
-public record MagicLinkResponse(String token, Instant expiresAt) {
+public record MagicLinkResponse(Instant expiresAt) {
 }

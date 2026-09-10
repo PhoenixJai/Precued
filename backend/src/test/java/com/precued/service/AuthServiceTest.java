@@ -42,7 +42,8 @@ class AuthServiceTest {
 
     @BeforeEach
     void setUp() {
-        authService = new AuthService(magicLinkTokenRepository, authSessionRepository, userRepository);
+        authService = new AuthService(
+                magicLinkTokenRepository, authSessionRepository, userRepository, "http://localhost:5173");
     }
 
     @Test
