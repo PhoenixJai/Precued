@@ -24,6 +24,14 @@ import java.util.UUID;
  * visibility is a separate concern the VisibilityEngine enforces afterward,
  * client-side, via setTrackSubscriptionPermissions; it is not expressed in
  * this token.
+ *
+ * canPublishData is deliberately withheld: the only legitimate data message
+ * on this room's data channel is the visibility-grants push in
+ * {@link com.precued.engine.VisibilityEngineImpl}, which goes over
+ * RoomServiceClient's server API, not a client token. A participant token
+ * that could publish data could otherwise forge that message to any other
+ * client (see VisibilityEngineImpl's Javadoc for how the receiving side
+ * tells a genuine push apart from a forged one).
  */
 @Service
 public class LiveKitTokenService {
@@ -74,7 +82,7 @@ public class LiveKitTokenService {
                 new RoomName(roomName),
                 new CanPublish(true),
                 new CanSubscribe(true),
-                new CanPublishData(true));
+                new CanPublishData(false));
 
         return new LiveKitTokenResponse(token.toJwt(), livekitUrl, roomName, identity);
     }

@@ -10,6 +10,7 @@ import {
   useTracks,
 } from "@livekit/components-react";
 import { ConnectionState, RoomEvent, Track } from "livekit-client";
+import type { DataPacket_Kind, RemoteParticipant } from "livekit-client";
 import { AppShell, Brand } from "../components/AppShell";
 import { api } from "../lib/api";
 import {
@@ -19,6 +20,7 @@ import {
   getParticipant,
   rememberGrantId,
 } from "../lib/session";
+import { isServerVisibilityGrant } from "../lib/visibilityGrants";
 import type {
   ActiveShare,
   LiveKitTokenResponse,
@@ -28,7 +30,6 @@ import type {
   VisibilityGrantMessage,
 } from "../types/precued";
 
-const VISIBILITY_TOPIC = "precued.visibility-grants";
 const POLL_MS = 1500;
 
 export default function CallPage() {
@@ -148,9 +149,19 @@ function CallExperience({ roomId }: { roomId: string }) {
   }, [currentShare?.id, currentShareRoleKey, presets, roles, roleIdsForPreset, selectedPresetId]);
 
   useEffect(() => {
-    const handleData = (...args: any[]) => {
-      const [payload, , , topic] = args as [Uint8Array, unknown, unknown, string | undefined];
-      if (topic !== VISIBILITY_TOPIC || !me.isHost) return;
+    const handleData = (
+      payload: Uint8Array,
+      sender?: RemoteParticipant,
+      _kind?: DataPacket_Kind,
+      topic?: string,
+    ) => {
+      // Only the backend's server-side push (VisibilityEngineImpl, via
+      // RoomServiceClient — never a client token, see LiveKitTokenService)
+      // is trusted here. Any connected participant can still publish a
+      // message on this same topic (LiveKit doesn't scope topics), so the
+      // sender must be verified, not just the topic — see
+      // lib/visibilityGrants.ts for why "no sender" is what that check is.
+      if (!isServerVisibilityGrant(topic, sender) || !me.isHost) return;
       try {
         const grants = JSON.parse(new TextDecoder().decode(payload)) as VisibilityGrantMessage[];
         room.localParticipant.setTrackSubscriptionPermissions(
