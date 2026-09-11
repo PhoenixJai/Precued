@@ -20,7 +20,21 @@
     <properties>
         <java.version>21</java.version>
         <livekit-server.version>0.9.1</livekit-server.version>
+        <pdfbox.version>3.0.8</pdfbox.version>
+        <aws-sdk.version>2.54.13</aws-sdk.version>
     </properties>
+
+    <dependencyManagement>
+        <dependencies>
+            <dependency>
+                <groupId>software.amazon.awssdk</groupId>
+                <artifactId>bom</artifactId>
+                <version>${aws-sdk.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
 
     <dependencies>
         <!-- Web -->
@@ -71,6 +85,44 @@
             <groupId>io.livekit</groupId>
             <artifactId>livekit-server</artifactId>
             <version>${livekit-server.version}</version>
+        </dependency>
+
+        <!-- Chunk 2 (Presentations feature, PDF import pipeline): renders each
+             PDF page to an image. 3.0.8 — current stable; the only CVE against
+             the 2.0.24-3.0.7 range (CVE-2026-23907, path traversal) is in the
+             pdfbox-examples module, which we don't depend on. Older XXE
+             (CVE-2019-0228) and DoS (CVE-2021-31811/31812) issues are long
+             fixed by this version. -->
+        <dependency>
+            <groupId>org.apache.pdfbox</groupId>
+            <artifactId>pdfbox</artifactId>
+            <version>${pdfbox.version}</version>
+        </dependency>
+
+        <!-- Chunk 2: S3-compatible client used against Cloudflare R2 (different
+             endpoint, same API) for slide image storage. Excludes the default
+             apache5-client: at BOM 2.54.13 it requires httpclient5 5.4+'s
+             TlsSocketStrategy, but something elsewhere in this project's
+             dependency tree pins httpclient5 to 5.3.1, which throws
+             NoClassDefFoundError at S3Client construction (confirmed via
+             StorageConfigTest, not assumed) — verified this way instead of
+             chasing the version-pinning source, since our usage (one
+             synchronous upload/download per request, no connection-pool
+             tuning) doesn't need Apache's client anyway. url-connection-client
+             is the simplest sync HTTP client with no such conflict. -->
+        <dependency>
+            <groupId>software.amazon.awssdk</groupId>
+            <artifactId>s3</artifactId>
+            <exclusions>
+                <exclusion>
+                    <groupId>software.amazon.awssdk</groupId>
+                    <artifactId>apache5-client</artifactId>
+                </exclusion>
+            </exclusions>
+        </dependency>
+        <dependency>
+            <groupId>software.amazon.awssdk</groupId>
+            <artifactId>url-connection-client</artifactId>
         </dependency>
 
         <!-- Lombok to cut entity/DTO boilerplate -->
