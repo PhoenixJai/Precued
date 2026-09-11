@@ -93,6 +93,8 @@ class LiveKitWebhookHandlerTest {
         // explicitly re-pushed too, not merely assumed covered above.
         verify(engine).recomputeAndPushForShare(shareA.getId());
         verify(engine).recomputeAndPushForShare(shareB.getId());
+        // No stale leftAt on this row, so no needless write.
+        verify(roomParticipantRepository, never()).save(any());
     }
 
     @Test
@@ -115,18 +117,90 @@ class LiveKitWebhookHandlerTest {
 
         verify(engine).recomputeAndPushForRoom(roomId);
         verify(engine, never()).recomputeAndPushForShare(org.mockito.ArgumentMatchers.any());
+        verify(roomParticipantRepository, never()).save(any());
     }
 
+    /**
+     * The reconnect ambiguity: resolveParticipant (used by both
+     * participant_joined and participant_left) always finds the SAME row by
+     * (roomId, livekitIdentity) — RoomParticipantService.join only creates a
+     * new row for a fresh REST /api/room-participants call, never for a
+     * LiveKit-protocol-level reconnect under an identity that's already
+     * joined. LiveKit fires participant_left then participant_joined for
+     * that same identity on a full reconnect (after a resume window
+     * expires), so a rejoin finding leftAt already set is a real, expected
+     * case, not a hypothetical — and ParticipantSessionInterceptor rejects
+     * every request from a leftAt-set participant's session token with
+     * nothing else able to ever clear it. Leaving it set here would
+     * permanently lock a reconnected participant out of their own session.
+     */
     @Test
-    void participantLeft_recomputesTheRoom() {
+    void participantJoined_rejoinAfterPriorLeftAt_clearsLeftAt_andStillRunsNormalJoinLogic() {
         givenRoomExists();
+        RoomParticipant viewer = new RoomParticipant();
+        viewer.setId(participantId);
+        viewer.setLeftAt(java.time.Instant.now().minusSeconds(10));
+        when(roomParticipantRepository.findByRoomIdAndLivekitIdentity(roomId, "viewer-1"))
+                .thenReturn(Optional.of(viewer));
+        when(shareRepository.findByPublisherIdAndStatus(participantId, Share.Status.ACTIVE))
+                .thenReturn(List.of());
+
         WebhookEvent event = WebhookEvent.newBuilder()
-                .setEvent("participant_left")
+                .setEvent("participant_joined")
                 .setRoom(LivekitModels.Room.newBuilder().setName("room-42").build())
+                .setParticipant(LivekitModels.ParticipantInfo.newBuilder().setIdentity("viewer-1").build())
                 .build();
 
         handler.handle(event);
 
+        assertThat(viewer.getLeftAt()).isNull();
+        verify(roomParticipantRepository).save(viewer);
+        verify(engine).recomputeAndPushForRoom(roomId);
+    }
+
+    @Test
+    void participantLeft_setsLeftAtOnResolvedParticipant_thenRecomputesTheRoom() {
+        givenRoomExists();
+        RoomParticipant participant = new RoomParticipant();
+        participant.setId(participantId);
+        when(roomParticipantRepository.findByRoomIdAndLivekitIdentity(roomId, "viewer-1"))
+                .thenReturn(Optional.of(participant));
+
+        WebhookEvent event = WebhookEvent.newBuilder()
+                .setEvent("participant_left")
+                .setRoom(LivekitModels.Room.newBuilder().setName("room-42").build())
+                .setParticipant(LivekitModels.ParticipantInfo.newBuilder().setIdentity("viewer-1").build())
+                .build();
+
+        handler.handle(event);
+
+        assertThat(participant.getLeftAt()).isNotNull().isBeforeOrEqualTo(java.time.Instant.now());
+        verify(roomParticipantRepository).save(participant);
+        verify(engine).recomputeAndPushForRoom(roomId);
+    }
+
+    @Test
+    void participantLeft_alreadyMarkedLeft_doesNotOverwriteTimestamp_butStillRecomputes() {
+        // Redelivery of the same event (LiveKit retries on transient
+        // failures) must not push the timestamp forward on every retry.
+        givenRoomExists();
+        java.time.Instant firstLeftAt = java.time.Instant.now().minusSeconds(30);
+        RoomParticipant participant = new RoomParticipant();
+        participant.setId(participantId);
+        participant.setLeftAt(firstLeftAt);
+        when(roomParticipantRepository.findByRoomIdAndLivekitIdentity(roomId, "viewer-1"))
+                .thenReturn(Optional.of(participant));
+
+        WebhookEvent event = WebhookEvent.newBuilder()
+                .setEvent("participant_left")
+                .setRoom(LivekitModels.Room.newBuilder().setName("room-42").build())
+                .setParticipant(LivekitModels.ParticipantInfo.newBuilder().setIdentity("viewer-1").build())
+                .build();
+
+        handler.handle(event);
+
+        assertThat(participant.getLeftAt()).isEqualTo(firstLeftAt);
+        verify(roomParticipantRepository, never()).save(any());
         verify(engine).recomputeAndPushForRoom(roomId);
     }
 
@@ -298,6 +372,66 @@ class LiveKitWebhookHandlerTest {
 
         verify(engine).recomputeAndPushForShare(shareA.getId());
         verify(engine).recomputeAndPushForShare(shareB.getId());
+    }
+
+    @Test
+    void trackUnpublished_setsUnpublishedAtOnResolvedTrack_thenRecomputesTheShare() {
+        Share share = new Share();
+        share.setId(UUID.randomUUID());
+        ShareTrack track = new ShareTrack();
+        track.setShare(share);
+        track.setLivekitTrackSid("TR_abc");
+        when(shareTrackRepository.findByLivekitTrackSid("TR_abc")).thenReturn(Optional.of(track));
+
+        WebhookEvent event = trackUnpublishedEvent("TR_abc");
+
+        handler.handle(event);
+
+        assertThat(track.getUnpublishedAt()).isNotNull().isBeforeOrEqualTo(java.time.Instant.now());
+        verify(shareTrackRepository).save(track);
+        verify(engine).recomputeAndPushForShare(share.getId());
+    }
+
+    @Test
+    void trackUnpublished_alreadyUnpublished_doesNotOverwriteTimestamp_butStillRecomputes() {
+        // Redelivery of the same event must not push the timestamp forward.
+        Share share = new Share();
+        share.setId(UUID.randomUUID());
+        java.time.Instant firstUnpublishedAt = java.time.Instant.now().minusSeconds(30);
+        ShareTrack track = new ShareTrack();
+        track.setShare(share);
+        track.setUnpublishedAt(firstUnpublishedAt);
+        when(shareTrackRepository.findByLivekitTrackSid("TR_abc")).thenReturn(Optional.of(track));
+
+        handler.handle(trackUnpublishedEvent("TR_abc"));
+
+        assertThat(track.getUnpublishedAt()).isEqualTo(firstUnpublishedAt);
+        verify(shareTrackRepository, never()).save(any());
+        verify(engine).recomputeAndPushForShare(share.getId());
+    }
+
+    /**
+     * The common case, not an edge case: only Share-tagged tracks (screen
+     * shares published with the "<shareId>:<label>" name, per
+     * onTrackPublished) ever get a ShareTrack row at all. Every base
+     * camera/mic track unpublish resolves to nothing here — that must be a
+     * silent no-op, not an error.
+     */
+    @Test
+    void trackUnpublished_unknownTrackSid_noOp() {
+        when(shareTrackRepository.findByLivekitTrackSid("TR_camera")).thenReturn(Optional.empty());
+
+        assertThatCode(() -> handler.handle(trackUnpublishedEvent("TR_camera"))).doesNotThrowAnyException();
+
+        verify(shareTrackRepository, never()).save(any());
+        verify(engine, never()).recomputeAndPushForShare(any());
+    }
+
+    private static WebhookEvent trackUnpublishedEvent(String trackSid) {
+        return WebhookEvent.newBuilder()
+                .setEvent("track_unpublished")
+                .setTrack(LivekitModels.TrackInfo.newBuilder().setSid(trackSid).build())
+                .build();
     }
 
     private static WebhookEvent trackPublishedEvent(String trackSid, String trackName, String publisherIdentity) {

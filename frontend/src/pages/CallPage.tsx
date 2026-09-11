@@ -20,6 +20,7 @@ import {
   getParticipant,
   rememberGrantId,
 } from "../lib/session";
+import { templateName } from "../lib/templates";
 import {
   computeLocalVisibilityGrants,
   isServerVisibilityGrant,
@@ -28,6 +29,7 @@ import {
 import type {
   ActiveShare,
   LiveKitTokenResponse,
+  Room,
   RoomParticipantWithGrants,
   RoomRole,
   TemplatePreset,
@@ -95,6 +97,7 @@ function CallExperience({ roomId }: { roomId: string }) {
   const room = useRoomContext();
   const connectionState = useConnectionState();
   const me = getParticipant()!;
+  const [roomInfo, setRoomInfo] = useState<Room | null>(null);
   const [roles, setRoles] = useState<RoomRole[]>([]);
   const [participants, setParticipants] = useState<RoomParticipantWithGrants[]>([]);
   const [presets, setPresets] = useState<TemplatePreset[]>([]);
@@ -131,12 +134,21 @@ function CallExperience({ roomId }: { roomId: string }) {
     [room, screenTracks],
   );
 
+  useEffect(() => {
+    let cancelled = false;
+    api.getRoom(roomId)
+      .then((nextRoom) => { if (!cancelled) setRoomInfo(nextRoom); })
+      .catch((err) => !cancelled && setError(err instanceof Error ? err.message : "Unable to load room"));
+    return () => { cancelled = true; };
+  }, [roomId]);
+
   const refresh = useCallback(async () => {
+    if (!roomInfo) return;
     try {
       const [nextRoles, nextParticipants, nextPresets, nextShares] = await Promise.all([
         api.getRoomRoles(roomId),
         api.getRoomParticipants(roomId),
-        api.getPresets("sales_call"),
+        api.getPresets(roomInfo.templateId),
         api.getActiveShares(roomId),
       ]);
       setRoles(nextRoles);
@@ -149,13 +161,14 @@ function CallExperience({ roomId }: { roomId: string }) {
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to refresh call state");
     }
-  }, [roomId, me.isHost, applyVisibilityPermissions]);
+  }, [roomId, roomInfo, me.isHost, applyVisibilityPermissions]);
 
   useEffect(() => {
+    if (!roomInfo) return;
     void refresh();
     const timer = window.setInterval(() => void refresh(), POLL_MS);
     return () => window.clearInterval(timer);
-  }, [refresh]);
+  }, [roomInfo, refresh]);
 
   const roleIdsForPreset = useCallback((preset: TemplatePreset) => {
     return preset.roleKeys
@@ -306,13 +319,15 @@ function CallExperience({ roomId }: { roomId: string }) {
 
   if (connectionState !== ConnectionState.Connected) return <ConnectingScreen />;
 
+  const sessionTitle = roomInfo ? templateName(roomInfo.templateId) : "Session";
+
   return (
     <AppShell showTaglines={false}>
       <section className="call-page">
         <div className="call-header-row">
           <div>
-            <h1>Sales Call · <span>Sales Call Session</span> <span className="live-pill">● Live</span></h1>
-            <p>Sales Call template&nbsp;&nbsp;·&nbsp;&nbsp; Precued session</p>
+            <h1>{sessionTitle} · <span>{sessionTitle} Session</span> <span className="live-pill">● Live</span></h1>
+            <p>{sessionTitle} template&nbsp;&nbsp;·&nbsp;&nbsp; Precued session</p>
           </div>
           <button className="end-call-top" onClick={endCall} disabled={busy}>☎ End call</button>
         </div>
