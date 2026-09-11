@@ -11,6 +11,8 @@ public record ShareResponse(
         UUID publisherParticipantId,
         UUID appliedPresetId,
         String label,
+        Share.Kind kind,
+        int currentSlideIndex,
         Share.Status status,
         Instant startedAt,
         Instant endedAt) {
@@ -22,6 +24,8 @@ public record ShareResponse(
                 share.getPublisher().getId(),
                 share.getAppliedPreset() == null ? null : share.getAppliedPreset().getId(),
                 share.getLabel(),
+                share.getKind(),
+                share.getCurrentSlideIndex(),
                 share.getStatus(),
                 share.getStartedAt(),
                 share.getEndedAt());

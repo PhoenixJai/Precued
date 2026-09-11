@@ -5,19 +5,23 @@ import com.precued.entity.RoomParticipant;
 import com.precued.entity.RoomRole;
 import com.precued.entity.Share;
 import com.precued.entity.ShareRoleGrant;
+import com.precued.entity.ShareSlide;
 import com.precued.repository.RoomRoleRepository;
 import com.precued.repository.ShareRepository;
 import com.precued.repository.ShareRoleGrantRepository;
+import com.precued.repository.ShareSlideRepository;
 import com.precued.security.CurrentParticipantContext;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.util.Optional;
 import java.util.UUID;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.never;
@@ -35,6 +39,7 @@ class ShareRoleGrantServiceTest {
     @Mock private ShareRoleGrantRepository grantRepository;
     @Mock private ShareRepository shareRepository;
     @Mock private RoomRoleRepository roomRoleRepository;
+    @Mock private ShareSlideRepository shareSlideRepository;
     @Mock private VisibilityEngine engine;
 
     private ShareRoleGrantService service;
@@ -63,7 +68,8 @@ class ShareRoleGrantServiceTest {
 
     @Test
     void revoke_recomputesOnlyThatOneShare() {
-        service = new ShareRoleGrantService(grantRepository, shareRepository, roomRoleRepository, engine);
+        service = new ShareRoleGrantService(
+                grantRepository, shareRepository, roomRoleRepository, shareSlideRepository, engine);
 
         UUID shareId = UUID.randomUUID();
         Share share = shareWithPublisher(shareId);
@@ -86,7 +92,8 @@ class ShareRoleGrantServiceTest {
 
     @Test
     void grant_byNonPublisher_rejectsAndDoesNotCreateGrant() {
-        service = new ShareRoleGrantService(grantRepository, shareRepository, roomRoleRepository, engine);
+        service = new ShareRoleGrantService(
+                grantRepository, shareRepository, roomRoleRepository, shareSlideRepository, engine);
 
         UUID shareId = UUID.randomUUID();
         Share share = shareWithPublisher(shareId);
@@ -111,7 +118,8 @@ class ShareRoleGrantServiceTest {
 
     @Test
     void revoke_byNonPublisher_rejectsAndDoesNotRevokeGrant() {
-        service = new ShareRoleGrantService(grantRepository, shareRepository, roomRoleRepository, engine);
+        service = new ShareRoleGrantService(
+                grantRepository, shareRepository, roomRoleRepository, shareSlideRepository, engine);
 
         UUID shareId = UUID.randomUUID();
         Share share = shareWithPublisher(shareId);
@@ -133,5 +141,115 @@ class ShareRoleGrantServiceTest {
 
         verify(grantRepository, never()).save(any());
         verify(engine, never()).recomputeAndPushForShare(any());
+    }
+
+    // ===== slide-specific grants — Chunk 3, Precued_DataModel.md "Presentations Feature" =====
+
+    @Test
+    void grant_withShareSlideId_createsSlideSpecificGrant() {
+        service = new ShareRoleGrantService(
+                grantRepository, shareRepository, roomRoleRepository, shareSlideRepository, engine);
+
+        UUID shareId = UUID.randomUUID();
+        Share share = shareWithPublisher(shareId);
+        UUID roleId = UUID.randomUUID();
+        RoomRole role = new RoomRole();
+        role.setId(roleId);
+        UUID slideId = UUID.randomUUID();
+        ShareSlide slide = new ShareSlide();
+        slide.setId(slideId);
+        slide.setShare(share);
+
+        when(shareRepository.findById(shareId)).thenReturn(Optional.of(share));
+        when(roomRoleRepository.findById(roleId)).thenReturn(Optional.of(role));
+        when(shareSlideRepository.findById(slideId)).thenReturn(Optional.of(slide));
+        when(grantRepository.save(any(ShareRoleGrant.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        authenticateAsPublisher();
+
+        ArgumentCaptor<ShareRoleGrant> captor = ArgumentCaptor.forClass(ShareRoleGrant.class);
+        service.grant(shareId, roleId, slideId);
+
+        verify(grantRepository).save(captor.capture());
+        assertThat(captor.getValue().getShareSlide()).isSameAs(slide);
+        verify(engine).recomputeAndPushForShare(shareId);
+    }
+
+    @Test
+    void grant_withNullShareSlideId_behavesExactlyLikeTheTwoArgOverload() {
+        service = new ShareRoleGrantService(
+                grantRepository, shareRepository, roomRoleRepository, shareSlideRepository, engine);
+
+        UUID shareId = UUID.randomUUID();
+        Share share = shareWithPublisher(shareId);
+        UUID roleId = UUID.randomUUID();
+        RoomRole role = new RoomRole();
+        role.setId(roleId);
+
+        when(shareRepository.findById(shareId)).thenReturn(Optional.of(share));
+        when(roomRoleRepository.findById(roleId)).thenReturn(Optional.of(role));
+        when(grantRepository.save(any(ShareRoleGrant.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        authenticateAsPublisher();
+
+        ArgumentCaptor<ShareRoleGrant> captor = ArgumentCaptor.forClass(ShareRoleGrant.class);
+        service.grant(shareId, roleId, null);
+
+        verify(grantRepository).save(captor.capture());
+        assertThat(captor.getValue().getShareSlide()).isNull();
+        verify(shareSlideRepository, never()).findById(any());
+    }
+
+    @Test
+    void grant_withShareSlideIdBelongingToADifferentShare_rejectsWithoutSavingAGrant() {
+        service = new ShareRoleGrantService(
+                grantRepository, shareRepository, roomRoleRepository, shareSlideRepository, engine);
+
+        UUID shareId = UUID.randomUUID();
+        Share share = shareWithPublisher(shareId);
+        UUID roleId = UUID.randomUUID();
+        RoomRole role = new RoomRole();
+        role.setId(roleId);
+
+        UUID slideId = UUID.randomUUID();
+        Share otherShare = new Share();
+        otherShare.setId(UUID.randomUUID());
+        ShareSlide slideFromAnotherShare = new ShareSlide();
+        slideFromAnotherShare.setId(slideId);
+        slideFromAnotherShare.setShare(otherShare);
+
+        when(shareRepository.findById(shareId)).thenReturn(Optional.of(share));
+        when(roomRoleRepository.findById(roleId)).thenReturn(Optional.of(role));
+        when(shareSlideRepository.findById(slideId)).thenReturn(Optional.of(slideFromAnotherShare));
+        authenticateAsPublisher();
+
+        assertThatThrownBy(() -> service.grant(shareId, roleId, slideId))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("does not belong to Share " + shareId);
+
+        verify(grantRepository, never()).save(any());
+        verify(engine, never()).recomputeAndPushForShare(any());
+    }
+
+    @Test
+    void grant_withUnknownShareSlideId_returnsNotFound() {
+        service = new ShareRoleGrantService(
+                grantRepository, shareRepository, roomRoleRepository, shareSlideRepository, engine);
+
+        UUID shareId = UUID.randomUUID();
+        Share share = shareWithPublisher(shareId);
+        UUID roleId = UUID.randomUUID();
+        RoomRole role = new RoomRole();
+        role.setId(roleId);
+        UUID slideId = UUID.randomUUID();
+
+        when(shareRepository.findById(shareId)).thenReturn(Optional.of(share));
+        when(roomRoleRepository.findById(roleId)).thenReturn(Optional.of(role));
+        when(shareSlideRepository.findById(slideId)).thenReturn(Optional.empty());
+        authenticateAsPublisher();
+
+        assertThatThrownBy(() -> service.grant(shareId, roleId, slideId))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("No ShareSlide with id " + slideId);
+
+        verify(grantRepository, never()).save(any());
     }
 }

@@ -1,6 +1,8 @@
 package com.precued.service;
 
 import com.precued.controller.dto.ActiveShareResponse;
+import com.precued.controller.dto.ShareRoleGrantResponse;
+import com.precued.controller.dto.SlideResponse;
 import com.precued.engine.VisibilityEngine;
 import com.precued.entity.ParticipantRoleAssignment;
 import com.precued.entity.RoomParticipant;
@@ -12,6 +14,7 @@ import com.precued.repository.RoomParticipantRepository;
 import com.precued.repository.RoomRepository;
 import com.precued.repository.ShareRepository;
 import com.precued.repository.ShareRoleGrantRepository;
+import com.precued.repository.ShareSlideRepository;
 import com.precued.repository.ShareTrackRepository;
 import com.precued.repository.TemplatePresetRepository;
 import com.precued.security.CurrentParticipantContext;
@@ -39,6 +42,7 @@ public class ShareLifecycleService {
     private final RoomRepository roomRepository;
     private final ParticipantRoleAssignmentRepository assignmentRepository;
     private final ShareRoleGrantRepository shareRoleGrantRepository;
+    private final ShareSlideRepository shareSlideRepository;
     private final TemplatePresetRepository templatePresetRepository;
     private final VisibilityEngine engine;
 
@@ -49,6 +53,7 @@ public class ShareLifecycleService {
             RoomRepository roomRepository,
             ParticipantRoleAssignmentRepository assignmentRepository,
             ShareRoleGrantRepository shareRoleGrantRepository,
+            ShareSlideRepository shareSlideRepository,
             TemplatePresetRepository templatePresetRepository,
             VisibilityEngine engine) {
         this.shareRepository = shareRepository;
@@ -57,6 +62,7 @@ public class ShareLifecycleService {
         this.roomRepository = roomRepository;
         this.assignmentRepository = assignmentRepository;
         this.shareRoleGrantRepository = shareRoleGrantRepository;
+        this.shareSlideRepository = shareSlideRepository;
         this.templatePresetRepository = templatePresetRepository;
         this.engine = engine;
     }
@@ -217,7 +223,33 @@ public class ShareLifecycleService {
 
         return shareRepository.findByRoomIdAndStatus(roomId, Share.Status.ACTIVE).stream()
                 .map(share -> new ActiveShareResponse(
-                        share.getId(), share.getLabel(), activeRoomRoleIds(share.getId())))
+                        share.getId(),
+                        share.getLabel(),
+                        share.getKind(),
+                        share.getCurrentSlideIndex(),
+                        activeRoomRoleIds(share.getId())))
+                .toList();
+    }
+
+    /** Active ShareRoleGrants for a Share, including per-slide scoping — Chunk 3's presenter visibility matrix. */
+    public List<ShareRoleGrantResponse> listGrants(UUID shareId) {
+        if (!shareRepository.existsById(shareId)) {
+            throw new IllegalArgumentException("No Share with id " + shareId);
+        }
+
+        return shareRoleGrantRepository.findByShareIdAndRevokedAtIsNull(shareId).stream()
+                .map(ShareRoleGrantResponse::from)
+                .toList();
+    }
+
+    /** Ordered ShareSlide rows for a PRESENTATION-kind Share — Chunk 3's presenter thumbnail strip / reload. */
+    public List<SlideResponse> listSlides(UUID shareId) {
+        if (!shareRepository.existsById(shareId)) {
+            throw new IllegalArgumentException("No Share with id " + shareId);
+        }
+
+        return shareSlideRepository.findByShareIdOrderBySlideIndexAsc(shareId).stream()
+                .map(slide -> SlideResponse.from(slide, shareId))
                 .toList();
     }
 
