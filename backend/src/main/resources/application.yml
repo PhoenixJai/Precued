@@ -38,7 +38,7 @@ precued:
   livekit:
     api-key: ${LIVEKIT_API_KEY:}
     api-secret: ${LIVEKIT_API_SECRET:}
-    host: ${LIVEKIT_HOST:} # wss://<project>.livekit.cloud
+    host: ${LIVEKIT_HOST:} # wss://<project>.livekit.cloud — LiveKitConfig derives the https:// REST URL from this itself
   auth:
     magic-link:
       base-url: ${APP_BASE_URL:http://localhost:5173}
