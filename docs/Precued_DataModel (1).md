@@ -1,6 +1,6 @@
 # Precued MVP — Data Model (Sales Call · Mock Trial · LD Debate)
 
-13 tables, one visibility engine (interface specified below — see "VisibilityEngine — Interface Spec"). Verticals (Sales Call, Mock Trial, LD Debate) are rows in `Template`/`TemplateRole`/`TemplatePreset` — no template-specific code anywhere in the schema.
+14 tables, one visibility engine (interface specified below — see "VisibilityEngine — Interface Spec"). Verticals (Sales Call, Mock Trial, LD Debate) are rows in `Template`/`TemplateRole`/`TemplatePreset` — no template-specific code anywhere in the schema.
 
 ## Design Decisions
 
@@ -8,6 +8,7 @@
 2. **Participant identity is stable across role changes.** A `RoomParticipant` is one person's membership in a room, for the room's whole lifetime. Their role is tracked separately in `ParticipantRoleAssignment`, which timestamps when a role starts and ends — so reassigning someone mid-call doesn't create a new identity or lose history.
 3. **A Share is a business concept, not a LiveKit track.** One share action (e.g. starting a screen share) can produce more than one track (video + audio). `Share` holds the policy; `ShareTrack` holds the actual track SID(s) underneath it.
 4. **Visibility is allow-list policy, compiled at runtime.** `ShareRoleGrant` stores which roles are permitted to see a share. No grant row = never subscribed — not hidden client-side, never sent. A single `VisibilityEngine` reads this policy and compiles it into live LiveKit participant/track permissions whenever a grant, role assignment, or share changes.
+5. **Slide-level visibility is a same-slide-for-everyone model, not per-participant navigation.** `Share.current_slide_index` is the one live presenter position all connected participants share. A role either sees that slide or gets the lock state — no participant has an independent slide position. `ShareRoleGrant.share_slide_id` is a nullable refinement of Decision #4's allow-list, not a new mechanism: `NULL` means whole-share grant (existing behavior), a set value means the grant applies only when that slide is current.
 
 ## Tables
 
@@ -129,11 +130,25 @@ MVP rule: `status` flips `PENDING → USED` when `uses_count` reaches `max_uses`
 | publisher_participant_id | fk → RoomParticipant | must hold a host role |
 | applied_preset_id | fk → TemplatePreset \| null | which preset the host picked, for reference |
 | label | string | host-entered, e.g. "Exhibit A" |
+| kind | enum | `screen` \| `presentation` — **NEW**: `presentation` added for slide-based Shares (Chunk 1). Existing `screen` Shares are unaffected by anything below. |
 | status | enum | `active` \| `ended` |
+| current_slide_index | int | **NEW**, default `0`. Only meaningful when `kind = presentation` — the presenter's single live slide position; all connected participants are evaluated against this one value, not an individual position each (Decision #5). |
 | started_at | timestamp | |
 | ended_at | timestamp \| null | |
 
 MVP rule: if the `RoomParticipant` holding `publisher_participant_id` for an active `Share` disconnects, that `Share` transitions to `status = ended` and every one of its `ShareTrack` rows gets `unpublished_at` set. No orphaned "active" Share persists after its publisher leaves, and there is no auto-reassign to a different host-role participant — a new `Share` must be explicitly started to resume.
+
+### ShareSlide
+*(**NEW** — one slide belonging to a `presentation`-kind Share; introduced in Chunk 1)*
+| Field | Type | Notes |
+|---|---|---|
+| id | uuid | PK |
+| share_id | fk → Share | parent Share; only populated for `kind = presentation` |
+| slide_index | int | unique per `share_id` — ordering position, matched against `Share.current_slide_index` |
+| image_url | string \| null | nullable in Chunk 1 (schema only, no real content); populated by the import pipeline in a later chunk |
+| created_at | timestamp | |
+
+No rows exist for `screen`-kind Shares. This table has zero relationship to `ShareTrack` — a `presentation` Share's actual LiveKit media (if any, e.g. presenter audio) is still tracked via `ShareTrack` exactly as today; `ShareSlide` only carries the visual slide content and its per-slide visibility hook.
 
 ### ShareTrack
 *(actual LiveKit track(s) under a Share — this is Decision #3)*
@@ -147,18 +162,21 @@ MVP rule: if the `RoomParticipant` holding `publisher_participant_id` for an act
 | unpublished_at | timestamp \| null | |
 
 ### ShareRoleGrant
-*(the allow-list — this is Decision #4)*
+*(the allow-list — this is Decision #4, extended by Decision #5)*
 | Field | Type | Notes |
 |---|---|---|
 | id | uuid | PK |
 | share_id | fk → Share | |
 | room_role_id | fk → RoomRole | a role permitted to view this share |
+| share_slide_id | fk → ShareSlide \| null | **NEW**, nullable. `NULL` = whole-share grant, unaffected existing behavior. A set value scopes this grant to only that slide being current — see extended Runtime Rule below. |
 | granted_at | timestamp | |
 | revoked_at | timestamp \| null | null = currently active |
 
 ## Runtime Rule
 
 A `RoomParticipant` receives a `Share`'s tracks **iff** their currently active `ParticipantRoleAssignment` points to a `RoomRole` that has an active `ShareRoleGrant` for that `Share`. No grant means the track is never subscribed — not hidden after delivery.
+
+**Extended for slide-level visibility (Chunk 1):** for a `presentation`-kind Share, a role sees the current slide **iff** it holds an active `ShareRoleGrant` with `share_slide_id IS NULL` (whole-share grant — existing behavior, unaffected) **OR** an active `ShareRoleGrant` with `share_slide_id` matching the `ShareSlide` row at `Share.current_slide_index`. A role with only slide-specific grants sees the lock state on any slide those grants don't cover. `screen`-kind Shares never populate `share_slide_id`, so this extension changes nothing for them.
 
 ## VisibilityEngine — Interface Spec
 
@@ -177,19 +195,21 @@ compute_grants_for_share(share_id) -> List[ParticipantTrackPermission]
 
 Input:  share_id
 Reads:  Share.room_id
+        → Share.kind, Share.current_slide_index (if kind = presentation)
         → all RoomParticipants in that room with connection state = connected
         → each participant's currently active ParticipantRoleAssignment (revoked_at IS NULL)
-        → active ShareRoleGrants (revoked_at IS NULL) for this share_id
+        → active ShareRoleGrants (revoked_at IS NULL) for this share_id,
+          each evaluated against share_slide_id per the extended Runtime Rule
         → ShareTracks under this share (video/audio track SIDs)
 Output: one entry per connected RoomParticipant:
         {
           livekit_identity: string,
-          allowed: bool,        // true iff their active role has an active grant for this share
+          allowed: bool,        // true iff their active role has a qualifying grant (whole-share, or matching current slide)
           track_sids: [string]  // this Share's ShareTrack.livekit_track_sid values, only if allowed
         }
 ```
 
-Pure DB read + boolean join, matching the Runtime Rule above. No LiveKit call happens here. This is safely callable as often as needed and is idempotent — same DB state in, same permission list out.
+Pure DB read + boolean join, matching the Runtime Rule above (including its slide-level extension). No LiveKit call happens here. This is safely callable as often as needed and is idempotent — same DB state in, same permission list out.
 
 **Part B — Push to publisher + apply (backend → publisher's client → LiveKit)**
 
@@ -226,6 +246,7 @@ The engine runs Part A+B whenever one of these fires:
 | `ShareRoleGrant` created or revoked | our DB write (host changes visibility) | that one Share |
 | `Share` started | our DB write | that one Share (fresh compute, no prior state) |
 | `Share` ended | our DB write | none — tracks unpublished, permissions moot |
+| `Share.current_slide_index` changed | our DB write (host advances/rewinds a slide) — **NEW**, Chunk 1 | that one Share only (same pattern as the `ShareRoleGrant` row above, just keyed off a different write path) |
 | LiveKit webhook `participant_joined` | LiveKit → our webhook endpoint | every active Share in that room, for that one participant |
 | LiveKit webhook `participant_left` | LiveKit → our webhook endpoint | every active Share in that room (drop them from the list) |
 | LiveKit webhook `track_published` | LiveKit → our webhook endpoint | the Share that ShareTrack belongs to (attach new track_sid to existing grants) |
@@ -262,3 +283,13 @@ Roles: **Judge** (host) · Affirmative · Negative · Audience (multi-member)
 Presets: All Roles · Judge Only · Affirmative Only · Negative Only
 
 Adding a fourth template later means adding rows to `Template`/`TemplateRole`/`TemplatePreset`/`TemplatePresetRole` — zero changes to Room, Share, or the VisibilityEngine.
+
+## Presentations Feature — Chunk Status
+
+Slide-level visibility is being built in sequenced chunks (see project decomposition). This document reflects **Chunk 1 (schema + Runtime Rule extension) only**:
+
+- ✅ Chunk 1 — `Share.kind`/`current_slide_index`, `ShareSlide`, `ShareRoleGrant.share_slide_id`, extended Runtime Rule, new trigger row. Reflected above.
+- ⬜ Chunk 2 — PDF import pipeline populates `ShareSlide.image_url` with real content. Not yet reflected; `image_url` remains nullable/placeholder until this lands.
+- ⬜ Chunk 3 — Presenter/viewer UI for slide navigation and per-slide visibility controls.
+- ⬜ Chunk 4 — PPTX import (via PDF conversion).
+- ⬜ Parked — native slide creation/editor. Not scoped; revisit only after Chunks 1–3 are live and validated.
