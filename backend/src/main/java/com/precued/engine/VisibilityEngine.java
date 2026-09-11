@@ -57,6 +57,7 @@ import java.util.UUID;
  *   - ShareRoleGrant created/revoked             -> that Share's publisher
  *   - Share started                              -> that Share's publisher
  *   - Share ended                                -> none (tracks unpublished, permissions moot)
+ *   - Share.currentSlideIndex changed (Chunk 1)  -> that Share's publisher, same pattern as ShareRoleGrant above
  *   - LiveKit webhook participant_joined/left    -> every active publisher in the room
  *   - LiveKit webhook track_published            -> the publisher of the Share that track belongs to
  *

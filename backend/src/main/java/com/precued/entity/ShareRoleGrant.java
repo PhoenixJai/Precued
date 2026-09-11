@@ -30,6 +30,16 @@ public class ShareRoleGrant {
     @JoinColumn(name = "room_role_id", nullable = false)
     private RoomRole roomRole;
 
+    /**
+     * NEW (Chunk 1, Precued_DataModel.md "Presentations Feature"). Null =
+     * whole-share grant (existing behavior, unaffected). A set value scopes
+     * this grant to only that slide being current — see the Runtime Rule's
+     * Chunk 1 extension.
+     */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "share_slide_id")
+    private ShareSlide shareSlide;
+
     @Column(name = "granted_at", nullable = false)
     private Instant grantedAt;
 
