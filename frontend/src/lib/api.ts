@@ -3,6 +3,7 @@ import type {
   LiveKitTokenResponse,
   MagicLinkResponse,
   ParticipantRoleAssignment,
+  PresentationUploadResponse,
   Room,
   RoomParticipant,
   RoomParticipantWithGrants,
@@ -10,6 +11,7 @@ import type {
   SessionResponse,
   Share,
   ShareRoleGrant,
+  ShareSlide,
   TemplateId,
   TemplatePreset,
 } from "../types/precued";
@@ -29,10 +31,14 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   // a session exists (auth, room creation, join, templates) just won't have
   // one in storage yet, and the backend doesn't require it for those.
   const participant = getParticipant();
+  // A FormData body (presentation upload) must let the browser set its own
+  // multipart/form-data boundary header — forcing application/json here
+  // would break the request.
+  const isFormData = init?.body instanceof FormData;
   const response = await fetch(`${API_BASE}${path}`, {
     ...init,
     headers: {
-      "Content-Type": "application/json",
+      ...(isFormData ? {} : { "Content-Type": "application/json" }),
       ...(participant ? { Authorization: `Bearer ${participant.sessionToken}` } : {}),
       ...(init?.headers ?? {}),
     },
@@ -51,6 +57,30 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 
   if (response.status === 204) return undefined as T;
   return (await response.json()) as T;
+}
+
+/**
+ * A plain <img src> can't send an Authorization header, and the proxy
+ * endpoint requires one (ParticipantSessionInterceptor) — so slide images
+ * are fetched here as an authenticated blob and turned into an object URL,
+ * never loaded directly by src. 403 (not authorized for this slide right
+ * now) is an expected, common outcome — not an exception — since a viewer
+ * without a qualifying grant on the current slide hits it on every poll
+ * tick; only unexpected failures are distinguished by status for the
+ * caller to decide how to react.
+ */
+export type SlideImageResult =
+  | { ok: true; objectUrl: string }
+  | { ok: false; status: number };
+
+async function fetchSlideImage(shareId: string, slideIndex: number): Promise<SlideImageResult> {
+  const participant = getParticipant();
+  const response = await fetch(`${API_BASE}/api/shares/${shareId}/slides/${slideIndex}/image`, {
+    headers: participant ? { Authorization: `Bearer ${participant.sessionToken}` } : {},
+  });
+  if (!response.ok) return { ok: false, status: response.status };
+  const blob = await response.blob();
+  return { ok: true, objectUrl: URL.createObjectURL(blob) };
 }
 
 export const api = {
@@ -145,14 +175,44 @@ export const api = {
     return request<Share>(`/api/shares/${shareId}/end`, { method: "POST" });
   },
 
-  createGrant(shareId: string, roomRoleId: string) {
+  /** shareSlideId omitted/null creates a whole-share grant — unchanged prior behavior. */
+  createGrant(shareId: string, roomRoleId: string, shareSlideId?: string | null) {
     return request<ShareRoleGrant>("/api/share-role-grants", {
       method: "POST",
-      body: JSON.stringify({ shareId, roomRoleId }),
+      body: JSON.stringify({ shareId, roomRoleId, shareSlideId: shareSlideId ?? null }),
     });
   },
 
   revokeGrant(grantId: string) {
     return request<ShareRoleGrant>(`/api/share-role-grants/${grantId}/revoke`, { method: "POST" });
   },
+
+  uploadPresentation(roomId: string, publisherParticipantId: string, label: string, file: File) {
+    const formData = new FormData();
+    formData.append("roomId", roomId);
+    formData.append("publisherParticipantId", publisherParticipantId);
+    formData.append("label", label);
+    formData.append("file", file);
+    return request<PresentationUploadResponse>("/api/shares/presentations", {
+      method: "POST",
+      body: formData,
+    });
+  },
+
+  getSlides(shareId: string) {
+    return request<ShareSlide[]>(`/api/shares/${shareId}/slides`);
+  },
+
+  getShareGrants(shareId: string) {
+    return request<ShareRoleGrant[]>(`/api/shares/${shareId}/grants`);
+  },
+
+  changeSlide(shareId: string, slideIndex: number) {
+    return request<Share>(`/api/shares/${shareId}/current-slide`, {
+      method: "POST",
+      body: JSON.stringify({ slideIndex }),
+    });
+  },
+
+  fetchSlideImage,
 };

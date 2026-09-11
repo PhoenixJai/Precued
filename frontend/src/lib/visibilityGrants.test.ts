@@ -47,7 +47,13 @@ describe("isServerVisibilityGrant", () => {
 });
 
 describe("computeLocalVisibilityGrants", () => {
-  const share: ActiveShare = { id: "share-1", label: "Screen share", roomRoleIds: ["role-sales-eng"] };
+  const share: ActiveShare = {
+    id: "share-1",
+    label: "Screen share",
+    kind: "SCREEN",
+    currentSlideIndex: 0,
+    roomRoleIds: ["role-sales-eng"],
+  };
 
   it("always allows base tracks, even with no active share", () => {
     const viewer = participant({ livekitIdentity: "viewer-1", activeRoomRoleId: "role-client" });

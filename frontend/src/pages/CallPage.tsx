@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { DragEvent } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import {
   LiveKitRoom,
@@ -26,15 +27,28 @@ import {
   isServerVisibilityGrant,
   toTrackSubscriptionPermissions,
 } from "../lib/visibilityGrants";
+import type { CellState } from "../lib/presentationVisibility";
+import { cellState, planCellStateChange } from "../lib/presentationVisibility";
 import type {
   ActiveShare,
   LiveKitTokenResponse,
   Room,
   RoomParticipantWithGrants,
   RoomRole,
+  ShareRoleGrant,
+  ShareSlide,
   TemplatePreset,
   VisibilityGrantMessage,
 } from "../types/precued";
+
+type SlideImageState =
+  | { status: "idle" }
+  | { status: "loading" }
+  | { status: "visible"; objectUrl: string }
+  | { status: "locked" }
+  | { status: "error"; message: string };
+
+const MAX_CLIENT_UPLOAD_WARN_BYTES = 25 * 1024 * 1024; // matches precued.pdf.max-file-size-bytes (backend) — a UX nicety, not a security boundary; the server enforces the real cap.
 
 const POLL_MS = 1500;
 
@@ -107,9 +121,87 @@ function CallExperience({ roomId }: { roomId: string }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Presentation-kind Share state (Chunk 3). slides/grants are host-only,
+  // fetched once per Share (immutable list; grants refetched after each
+  // local edit) — never on the 1.5s poll, unlike slideImage below, which
+  // must be re-attempted every tick to catch both a slide advance and a
+  // mid-slide grant revoke (Runtime Rule access can change without the
+  // slide index changing at all).
+  const [slides, setSlides] = useState<ShareSlide[]>([]);
+  const [grants, setGrants] = useState<ShareRoleGrant[]>([]);
+  const [thumbnailUrls, setThumbnailUrls] = useState<Record<string, string>>({});
+  const [slideImage, setSlideImage] = useState<SlideImageState>({ status: "idle" });
+  const [uploadError, setUploadError] = useState<string | null>(null);
+  const slideImageUrlRef = useRef<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+
   const screenTracks = useTracks([Track.Source.ScreenShare], { onlySubscribed: false });
   const cameraTracks = useTracks([Track.Source.Camera], { onlySubscribed: false });
   const currentShare = activeShares[0] ?? null;
+
+  // Revoke the live slide's object URL on unmount only — per-tick swaps are
+  // handled inline in refreshSlideImage below (old URL revoked right before
+  // the new one is stored).
+  useEffect(() => () => {
+    if (slideImageUrlRef.current) URL.revokeObjectURL(slideImageUrlRef.current);
+  }, []);
+
+  const refreshSlideImage = useCallback(async (share: ActiveShare) => {
+    const result = await api.fetchSlideImage(share.id, share.currentSlideIndex);
+    if (slideImageUrlRef.current) {
+      URL.revokeObjectURL(slideImageUrlRef.current);
+      slideImageUrlRef.current = null;
+    }
+    if (result.ok) {
+      slideImageUrlRef.current = result.objectUrl;
+      setSlideImage({ status: "visible", objectUrl: result.objectUrl });
+    } else if (result.status === 403) {
+      setSlideImage({ status: "locked" });
+    } else {
+      setSlideImage({ status: "error", message: `Unable to load slide (${result.status})` });
+    }
+  }, []);
+
+  const refreshGrants = useCallback(async (shareId: string) => {
+    try {
+      setGrants(await api.getShareGrants(shareId));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unable to load visibility grants");
+    }
+  }, []);
+
+  // Host-only: the ordered slide list and the visibility matrix's thumbnail
+  // images. Fetched once per Share id, not on the poll — the slide list
+  // itself never changes after upload in this MVP (no add/remove/reorder).
+  useEffect(() => {
+    if (!me.isHost || !currentShare || currentShare.kind !== "PRESENTATION") {
+      setSlides([]);
+      setGrants([]);
+      return;
+    }
+    let cancelled = false;
+    api.getSlides(currentShare.id).then((next) => { if (!cancelled) setSlides(next); }).catch(() => {});
+    void refreshGrants(currentShare.id);
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentShare?.id, currentShare?.kind, me.isHost]);
+
+  useEffect(() => {
+    if (!me.isHost || !currentShare || slides.length === 0) {
+      setThumbnailUrls({});
+      return;
+    }
+    let cancelled = false;
+    Promise.all(
+      slides.map(async (slide) => [slide.id, await api.fetchSlideImage(currentShare.id, slide.slideIndex)] as const),
+    ).then((results) => {
+      if (cancelled) return;
+      const next: Record<string, string> = {};
+      for (const [slideId, result] of results) if (result.ok) next[slideId] = result.objectUrl;
+      setThumbnailUrls(next);
+    });
+    return () => { cancelled = true; };
+  }, [me.isHost, currentShare?.id, slides]);
 
   // Re-asserts subscription permissions from the just-polled REST snapshot
   // (authenticated, unforgeable) rather than from whatever the last data
@@ -157,11 +249,24 @@ function CallExperience({ roomId }: { roomId: string }) {
       setActiveShares(nextShares);
       setError(null);
 
-      if (me.isHost) applyVisibilityPermissions(nextParticipants, nextShares[0] ?? null);
+      const nextCurrentShare = nextShares[0] ?? null;
+      if (me.isHost) applyVisibilityPermissions(nextParticipants, nextCurrentShare);
+
+      // Re-attempted every tick, not just on a slide-index change: a grant
+      // revoke on the CURRENT slide must be reflected within one poll
+      // interval too, per the same "unforgeable REST snapshot" trust model
+      // applyVisibilityPermissions uses for screen shares.
+      if (nextCurrentShare && nextCurrentShare.kind === "PRESENTATION") {
+        void refreshSlideImage(nextCurrentShare);
+      } else if (slideImageUrlRef.current) {
+        URL.revokeObjectURL(slideImageUrlRef.current);
+        slideImageUrlRef.current = null;
+        setSlideImage({ status: "idle" });
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to refresh call state");
     }
-  }, [roomId, roomInfo, me.isHost, applyVisibilityPermissions]);
+  }, [roomId, roomInfo, me.isHost, applyVisibilityPermissions, refreshSlideImage]);
 
   useEffect(() => {
     if (!roomInfo) return;
@@ -227,6 +332,79 @@ function CallExperience({ roomId }: { roomId: string }) {
     ? screenTracks.find((trackRef: any) => trackRef.publication?.trackName?.startsWith(`${currentShare.id}:`))
     : undefined;
 
+  // roomRoleIds (any active grant, whole-share or any-slide) isn't precise
+  // enough for a PRESENTATION share — "can I see the CURRENT slide" is only
+  // knowable from the actual proxy fetch attempt (slideImage), which is
+  // exactly what the Runtime Rule gates.
+  const viewerSeesCurrent = currentShare
+    ? currentShare.kind === "SCREEN" ? canSeeCurrentShare : slideImage.status === "visible"
+    : false;
+
+  async function uploadPresentationFile(file: File) {
+    if (!me.isHost || currentShare) return;
+    const looksLikePdf = file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf");
+    if (!looksLikePdf) {
+      setUploadError("Please choose a PDF file.");
+      return;
+    }
+    if (file.size > MAX_CLIENT_UPLOAD_WARN_BYTES) {
+      setUploadError("This file is larger than 25 MB and the server will likely reject it.");
+      return;
+    }
+    setUploadError(null);
+    setBusy(true);
+    setError(null);
+    setMoreOpen(false);
+    try {
+      const label = file.name.replace(/\.pdf$/i, "") || "Presentation";
+      await api.uploadPresentation(roomId, me.id, label, file);
+      await refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unable to upload presentation");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function handlePresentationDrop(event: DragEvent<HTMLDivElement>) {
+    if (!me.isHost || currentShare) return;
+    event.preventDefault();
+    const file = event.dataTransfer.files?.[0];
+    if (file) void uploadPresentationFile(file);
+  }
+
+  async function goToSlide(slideIndex: number) {
+    if (!currentShare || currentShare.kind !== "PRESENTATION" || !me.isHost) return;
+    if (slideIndex < 0 || slideIndex >= slides.length || slideIndex === currentShare.currentSlideIndex) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await api.changeSlide(currentShare.id, slideIndex);
+      await refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unable to change slide");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function setVisibilityCell(roomRoleId: string, slide: ShareSlide, newState: CellState) {
+    if (!currentShare) return;
+    const plan = planCellStateChange(roomRoleId, slide.id, newState, grants);
+    if (plan.toCreate.length === 0 && plan.toRevokeGrantIds.length === 0) return;
+    setBusy(true);
+    setError(null);
+    try {
+      for (const grantId of plan.toRevokeGrantIds) await api.revokeGrant(grantId);
+      for (const item of plan.toCreate) await api.createGrant(currentShare.id, item.roomRoleId, item.shareSlideId);
+      await refreshGrants(currentShare.id);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unable to update visibility");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function applyPreset(preset: TemplatePreset) {
     setSelectedPresetId(preset.id);
     if (!currentShare || !me.isHost) return;
@@ -269,7 +447,7 @@ function CallExperience({ roomId }: { roomId: string }) {
     let createdShare: ActiveShare | null = null;
     try {
       const share = await api.startShare(roomId, me.id, preset.id, "Screen share");
-      createdShare = { id: share.id, label: share.label, roomRoleIds: [] };
+      createdShare = { id: share.id, label: share.label, kind: share.kind, currentSlideIndex: share.currentSlideIndex, roomRoleIds: [] };
       for (const roomRoleId of roleIdsForPreset(preset)) {
         const grant = await api.createGrant(share.id, roomRoleId);
         rememberGrantId(share.id, roomRoleId, grant.id);
@@ -334,33 +512,90 @@ function CallExperience({ roomId }: { roomId: string }) {
 
         <div className="call-grid">
           <div className="call-main-column">
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="application/pdf"
+              style={{ display: "none" }}
+              onChange={(event) => {
+                const file = event.target.files?.[0];
+                if (file) void uploadPresentationFile(file);
+                event.target.value = "";
+              }}
+            />
+
             {me.isHost ? (
-              <div className="visibility-controls surface-card-lite">
-                <strong>Who can view the current share? <span className="info-icon">i</span></strong>
-                <div className="preset-tabs">
-                  {presets.map((preset) => (
-                    <button
-                      key={preset.id}
-                      className={selectedPresetId === preset.id ? "active" : ""}
-                      disabled={busy}
-                      onClick={() => applyPreset(preset)}
-                    >
-                      ♙ {preset.name}
-                    </button>
-                  ))}
+              currentShare?.kind === "PRESENTATION" ? (
+                <SlideVisibilityMatrix
+                  roles={roles.filter((role) => !role.isHostRole)}
+                  slides={slides}
+                  grants={grants}
+                  thumbnailUrls={thumbnailUrls}
+                  currentSlideIndex={currentShare.currentSlideIndex}
+                  disabled={busy}
+                  onChangeCell={setVisibilityCell}
+                  onGoToSlide={(index) => { void goToSlide(index); }}
+                />
+              ) : (
+                <div className="visibility-controls surface-card-lite">
+                  <strong>Who can view the current share? <span className="info-icon">i</span></strong>
+                  <div className="preset-tabs">
+                    {presets.map((preset) => (
+                      <button
+                        key={preset.id}
+                        className={selectedPresetId === preset.id ? "active" : ""}
+                        disabled={busy}
+                        onClick={() => applyPreset(preset)}
+                      >
+                        ♙ {preset.name}
+                      </button>
+                    ))}
+                  </div>
                 </div>
-              </div>
-            ) : currentShare && canSeeCurrentShare ? (
-              <div className="visible-banner"><span>◉</span><div><strong>Visible to your role</strong><small>This content is currently shared with {formatRoleNames(visibleRoleNames)}.</small></div></div>
+              )
+            ) : currentShare && viewerSeesCurrent ? (
+              <div className="visible-banner"><span>◉</span><div><strong>Visible to your role</strong><small>{currentShare.kind === "SCREEN" ? `This content is currently shared with ${formatRoleNames(visibleRoleNames)}.` : "This slide is currently visible to your role."}</small></div></div>
             ) : null}
 
-            <div className={`share-stage ${currentShare && !canSeeCurrentShare && !me.isHost ? "locked-stage" : ""}`}>
+            <div className={`share-stage ${(currentShare?.kind === "SCREEN" && !canSeeCurrentShare && !me.isHost) || (currentShare?.kind === "PRESENTATION" && !me.isHost && slideImage.status === "locked") ? "locked-stage" : ""}`}>
               {!currentShare ? (
-                <div className="empty-share-state">
+                <div
+                  className="empty-share-state"
+                  onDragOver={(event) => { if (me.isHost) event.preventDefault(); }}
+                  onDrop={handlePresentationDrop}
+                >
                   <div className="lock-or-share-icon">▣</div>
                   <h2>{me.isHost ? "Ready to share" : "Waiting for shared content"}</h2>
-                  <p>{me.isHost ? "Open More and choose Share screen to begin." : "Shared content will appear here when the host starts sharing."}</p>
+                  <p>{me.isHost ? "Open More to share your screen, or drop a PDF here to share a presentation." : "Shared content will appear here when the host starts sharing."}</p>
+                  {me.isHost && (
+                    <button className="secondary-button" disabled={busy} onClick={() => fileInputRef.current?.click()}>
+                      ▤ Share a presentation
+                    </button>
+                  )}
+                  {uploadError && <div className="error-banner">{uploadError}</div>}
                 </div>
+              ) : currentShare.kind === "PRESENTATION" ? (
+                slideImage.status === "visible" ? (
+                  <div className="slide-stage-wrap">
+                    <img className="slide-image" src={slideImage.objectUrl} alt={`Slide ${currentShare.currentSlideIndex + 1}`} />
+                  </div>
+                ) : slideImage.status === "locked" ? (
+                  <div className="locked-content">
+                    <div className="lock-circle">▢</div>
+                    <h2>Content not shared with your role</h2>
+                    <p>The host is currently showing a slide that isn’t visible to the {ownRole?.name ?? me.roleName} role.</p>
+                    <span />
+                    <small>You’ll see it here as soon as the host makes it visible to your role.</small>
+                  </div>
+                ) : slideImage.status === "error" ? (
+                  <div className="locked-content">
+                    <div className="lock-circle">!</div>
+                    <h2>Couldn’t load this slide</h2>
+                    <p>{slideImage.message}</p>
+                  </div>
+                ) : (
+                  <div className="share-pending"><div className="spinner small" /><strong>Loading slide...</strong></div>
+                )
               ) : !canSeeCurrentShare && !me.isHost ? (
                 <div className="locked-content">
                   <div className="lock-circle">▢</div>
@@ -403,7 +638,7 @@ function CallExperience({ roomId }: { roomId: string }) {
             meId={me.id}
             isHost={me.isHost}
             visibleRoleNames={visibleRoleNames}
-            canSeeCurrentShare={canSeeCurrentShare}
+            canSeeCurrentShare={viewerSeesCurrent}
             muted={!room.localParticipant.isMicrophoneEnabled}
             videoOff={!room.localParticipant.isCameraEnabled}
             onToggleMute={() => { void room.localParticipant.setMicrophoneEnabled(!room.localParticipant.isMicrophoneEnabled); }}
@@ -413,6 +648,7 @@ function CallExperience({ roomId }: { roomId: string }) {
             setMoreOpen={setMoreOpen}
             onStartShare={() => { void startScreenShare(); }}
             onStopShare={() => { void stopScreenShare(); }}
+            onSharePresentation={() => fileInputRef.current?.click()}
             busy={busy}
           />
         </div>
@@ -439,6 +675,7 @@ function ParticipantsSidebar(props: {
   setMoreOpen: (value: boolean) => void;
   onStartShare: () => void;
   onStopShare: () => void;
+  onSharePresentation: () => void;
   busy: boolean;
 }) {
   const roleById = new Map(props.roles.map((role) => [role.id, role]));
@@ -453,13 +690,17 @@ function ParticipantsSidebar(props: {
             <div className="participant-row" key={participant.id}>
               <span className="avatar-placeholder large-avatar">{initials(participant.displayName)}</span>
               <div className="participant-copy"><strong>{participant.displayName} {role?.isHostRole && <span className="host-badge">Host</span>} {participant.id === props.meId && !role?.isHostRole && <span className="host-badge">You</span>}</strong><small>{role?.name ?? "Unassigned"}</small></div>
-              {props.currentShare && <span className={`visibility-status ${canSee ? "can-see" : "cannot-see"}`}>{canSee ? "◉ Can see" : "⊘ Cannot see"}</span>}
+              {/* Per-participant status is only shown for SCREEN shares: roomRoleIds is
+                  a flat "any active grant" list, which for a PRESENTATION share can't
+                  distinguish "sees the current slide" from "has a grant for some other
+                  slide" — showing it would be misleading rather than merely incomplete. */}
+              {props.currentShare?.kind === "SCREEN" && <span className={`visibility-status ${canSee ? "can-see" : "cannot-see"}`}>{canSee ? "◉ Can see" : "⊘ Cannot see"}</span>}
             </div>
           );
         })}
       </div>
 
-      {props.currentShare && !props.isHost && props.canSeeCurrentShare && (
+      {props.currentShare?.kind === "SCREEN" && !props.isHost && props.canSeeCurrentShare && (
         <div className="sidebar-info-box"><strong>ⓘ Current share is visible to {formatRoleNames(props.visibleRoleNames)}.</strong><p>You can view this content, but you cannot change who can see it.</p></div>
       )}
 
@@ -470,13 +711,109 @@ function ParticipantsSidebar(props: {
           <ControlButton icon="•••" label="More" onClick={() => props.setMoreOpen(!props.moreOpen)} />
           {props.moreOpen && props.isHost && (
             <div className="more-menu">
-              <button disabled={props.busy} onClick={props.currentShare ? props.onStopShare : props.onStartShare}>{props.currentShare ? "Stop sharing" : "Share screen"}</button>
+              {props.currentShare ? (
+                <button disabled={props.busy} onClick={props.onStopShare}>Stop sharing</button>
+              ) : (
+                <>
+                  <button disabled={props.busy} onClick={props.onStartShare}>Share screen</button>
+                  <button disabled={props.busy} onClick={props.onSharePresentation}>Share presentation</button>
+                </>
+              )}
             </div>
           )}
         </div>
         <ControlButton icon="☎" label="End call" danger onClick={props.onEndCall} />
       </div>
     </aside>
+  );
+}
+
+/**
+ * Replaces the whole-share preset-tabs panel for a PRESENTATION-kind Share
+ * (Precued_DataModel.md "Presentations Feature" Chunk 3). Column headers
+ * double as the slide thumbnail strip / navigation (click to jump); each
+ * row is a non-host role, each cell a 3-state toggle. "Always visible"
+ * reflects a whole-share grant and is necessarily row-wide, not per-cell —
+ * see lib/presentationVisibility.ts's planCellStateChange doc comment for
+ * why choosing it flips every other cell in that row to match, and why
+ * downgrading away from it can leave other cells "Hidden" until granted
+ * individually.
+ */
+function SlideVisibilityMatrix(props: {
+  roles: RoomRole[];
+  slides: ShareSlide[];
+  grants: ShareRoleGrant[];
+  thumbnailUrls: Record<string, string>;
+  currentSlideIndex: number;
+  disabled: boolean;
+  onChangeCell: (roomRoleId: string, slide: ShareSlide, newState: CellState) => void;
+  onGoToSlide: (slideIndex: number) => void;
+}) {
+  const cellLabels: Record<CellState, string> = { always: "★ Always", slide: "◐ This slide", hidden: "⊘ Hidden" };
+
+  return (
+    <div className="visibility-controls presentation-matrix surface-card-lite">
+      <strong>Slide visibility by role <span className="info-icon">i</span></strong>
+      <div className="slide-nav-row">
+        <button disabled={props.disabled || props.currentSlideIndex <= 0} onClick={() => props.onGoToSlide(props.currentSlideIndex - 1)}>‹ Prev</button>
+        <span>Slide {props.currentSlideIndex + 1} of {props.slides.length}</span>
+        <button disabled={props.disabled || props.currentSlideIndex >= props.slides.length - 1} onClick={() => props.onGoToSlide(props.currentSlideIndex + 1)}>Next ›</button>
+      </div>
+      <div className="slide-matrix-scroll">
+        <table className="slide-matrix">
+          <thead>
+            <tr>
+              <th></th>
+              {props.slides.map((slide) => (
+                <th key={slide.id}>
+                  <button
+                    type="button"
+                    className={`slide-thumb-button ${slide.slideIndex === props.currentSlideIndex ? "active" : ""}`}
+                    disabled={props.disabled}
+                    onClick={() => props.onGoToSlide(slide.slideIndex)}
+                  >
+                    {props.thumbnailUrls[slide.id] ? (
+                      <img className="slide-thumb-image" src={props.thumbnailUrls[slide.id]} alt={`Slide ${slide.slideIndex + 1}`} />
+                    ) : (
+                      <span className="slide-thumb-placeholder" />
+                    )}
+                    <small>{slide.slideIndex + 1}</small>
+                  </button>
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {props.roles.map((role) => (
+              <tr key={role.id}>
+                <th scope="row">{role.name}</th>
+                {props.slides.map((slide) => {
+                  const state = cellState(role.id, slide.id, props.grants);
+                  return (
+                    <td key={slide.id}>
+                      <div className="cell-toggle">
+                        {(["always", "slide", "hidden"] as const).map((option) => (
+                          <button
+                            key={option}
+                            type="button"
+                            className={state === option ? "active" : ""}
+                            disabled={props.disabled}
+                            title={option === "always" ? "Always visible, on every slide" : option === "slide" ? "Visible only on this slide" : "Hidden on this slide"}
+                            onClick={() => props.onChangeCell(role.id, slide, option)}
+                          >
+                            {cellLabels[option]}
+                          </button>
+                        ))}
+                      </div>
+                    </td>
+                  );
+                })}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
   );
 }
 

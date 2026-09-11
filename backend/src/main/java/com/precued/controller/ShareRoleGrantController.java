@@ -28,7 +28,13 @@ public class ShareRoleGrantController {
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
     public ShareRoleGrantResponse create(@Valid @RequestBody CreateShareRoleGrantRequest request) {
-        return ShareRoleGrantResponse.from(shareRoleGrantService.grant(request.shareId(), request.roomRoleId()));
+        // Preserves the exact prior call shape for a whole-share grant
+        // (shareSlideId omitted/null); the 3-arg overload is only used for
+        // the new Chunk 3 slide-specific case.
+        var grant = request.shareSlideId() == null
+                ? shareRoleGrantService.grant(request.shareId(), request.roomRoleId())
+                : shareRoleGrantService.grant(request.shareId(), request.roomRoleId(), request.shareSlideId());
+        return ShareRoleGrantResponse.from(grant);
     }
 
     @PostMapping("/{id}/revoke")

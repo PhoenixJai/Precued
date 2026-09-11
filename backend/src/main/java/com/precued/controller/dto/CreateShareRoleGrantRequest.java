@@ -4,5 +4,6 @@ import jakarta.validation.constraints.NotNull;
 
 import java.util.UUID;
 
-public record CreateShareRoleGrantRequest(@NotNull UUID shareId, @NotNull UUID roomRoleId) {
+/** shareSlideId is optional — null (or omitted) means a whole-share grant, unaffected existing behavior. */
+public record CreateShareRoleGrantRequest(@NotNull UUID shareId, @NotNull UUID roomRoleId, UUID shareSlideId) {
 }

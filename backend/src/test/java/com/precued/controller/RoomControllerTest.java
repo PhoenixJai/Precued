@@ -3,6 +3,7 @@ package com.precued.controller;
 import com.precued.entity.Room;
 import com.precued.entity.RoomParticipant;
 import com.precued.entity.RoomRole;
+import com.precued.entity.Share;
 import com.precued.entity.Template;
 import com.precued.entity.User;
 import com.precued.controller.dto.ActiveShareResponse;
@@ -284,7 +285,8 @@ class RoomControllerTest {
         UUID shareId = UUID.randomUUID();
         UUID roleId = UUID.randomUUID();
 
-        ActiveShareResponse response = new ActiveShareResponse(shareId, "Exhibit A", List.of(roleId));
+        ActiveShareResponse response =
+                new ActiveShareResponse(shareId, "Exhibit A", Share.Kind.SCREEN, 0, List.of(roleId));
         when(shareLifecycleService.listActive(roomId)).thenReturn(List.of(response));
         stubAuthenticatedParticipant(roomId);
 

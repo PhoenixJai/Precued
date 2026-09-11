@@ -14,6 +14,7 @@ import com.precued.repository.RoomParticipantRepository;
 import com.precued.repository.RoomRepository;
 import com.precued.repository.ShareRepository;
 import com.precued.repository.ShareRoleGrantRepository;
+import com.precued.repository.ShareSlideRepository;
 import com.precued.repository.ShareTrackRepository;
 import com.precued.repository.TemplatePresetRepository;
 import com.precued.security.CurrentParticipantContext;
@@ -53,6 +54,7 @@ class ShareLifecycleServiceTest {
     @Mock private RoomRepository roomRepository;
     @Mock private ParticipantRoleAssignmentRepository assignmentRepository;
     @Mock private ShareRoleGrantRepository shareRoleGrantRepository;
+    @Mock private ShareSlideRepository shareSlideRepository;
     @Mock private TemplatePresetRepository templatePresetRepository;
     @Mock private VisibilityEngine engine;
 
@@ -70,6 +72,7 @@ class ShareLifecycleServiceTest {
                 roomRepository,
                 assignmentRepository,
                 shareRoleGrantRepository,
+                shareSlideRepository,
                 templatePresetRepository,
                 engine);
 
@@ -251,6 +254,24 @@ class ShareLifecycleServiceTest {
     }
 
     @Test
+    void listActive_includesKindAndCurrentSlideIndex_soPollingClientsSeeSlideAdvances() {
+        when(roomRepository.existsById(roomId)).thenReturn(true);
+
+        Share share = new Share();
+        share.setId(UUID.randomUUID());
+        share.setLabel("Deck");
+        share.setKind(Share.Kind.PRESENTATION);
+        share.setCurrentSlideIndex(2);
+        when(shareRepository.findByRoomIdAndStatus(roomId, Share.Status.ACTIVE)).thenReturn(List.of(share));
+        when(shareRoleGrantRepository.findByShareIdAndRevokedAtIsNull(share.getId())).thenReturn(List.of());
+
+        ActiveShareResponse response = service.listActive(roomId).get(0);
+
+        assertThat(response.kind()).isEqualTo(Share.Kind.PRESENTATION);
+        assertThat(response.currentSlideIndex()).isEqualTo(2);
+    }
+
+    @Test
     void listActive_unknownRoom_throwsIllegalArgumentException() {
         UUID unknownRoomId = UUID.randomUUID();
         when(roomRepository.existsById(unknownRoomId)).thenReturn(false);
@@ -258,6 +279,92 @@ class ShareLifecycleServiceTest {
         assertThatThrownBy(() -> service.listActive(unknownRoomId))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining(unknownRoomId.toString());
+    }
+
+    // ===== listSlides — Chunk 3, Precued_DataModel.md "Presentations Feature" =====
+
+    @Test
+    void listSlides_returnsOrderedSlidesWithProxyImageUrls() {
+        UUID shareId = UUID.randomUUID();
+        when(shareRepository.existsById(shareId)).thenReturn(true);
+
+        com.precued.entity.ShareSlide slide0 = new com.precued.entity.ShareSlide();
+        slide0.setId(UUID.randomUUID());
+        slide0.setSlideIndex(0);
+        slide0.setImageUrl("shares/" + shareId + "/slides/0.png");
+        com.precued.entity.ShareSlide slide1 = new com.precued.entity.ShareSlide();
+        slide1.setId(UUID.randomUUID());
+        slide1.setSlideIndex(1);
+        slide1.setImageUrl("shares/" + shareId + "/slides/1.png");
+        when(shareSlideRepository.findByShareIdOrderBySlideIndexAsc(shareId))
+                .thenReturn(List.of(slide0, slide1));
+
+        var result = service.listSlides(shareId);
+
+        assertThat(result).hasSize(2);
+        assertThat(result.get(0).slideIndex()).isEqualTo(0);
+        assertThat(result.get(0).imageUrl()).isEqualTo("/api/shares/" + shareId + "/slides/0/image");
+        assertThat(result.get(1).slideIndex()).isEqualTo(1);
+        assertThat(result.get(1).imageUrl()).isEqualTo("/api/shares/" + shareId + "/slides/1/image");
+    }
+
+    @Test
+    void listSlides_unknownShare_throwsIllegalArgumentException() {
+        UUID shareId = UUID.randomUUID();
+        when(shareRepository.existsById(shareId)).thenReturn(false);
+
+        assertThatThrownBy(() -> service.listSlides(shareId))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining(shareId.toString());
+    }
+
+    // ===== listGrants — Chunk 3, for the presenter's per-slide visibility matrix =====
+
+    @Test
+    void listGrants_returnsActiveGrantsIncludingShareSlideId() {
+        UUID shareId = UUID.randomUUID();
+        when(shareRepository.existsById(shareId)).thenReturn(true);
+
+        UUID roleId = UUID.randomUUID();
+        RoomRole role = new RoomRole();
+        role.setId(roleId);
+
+        Share share = new Share();
+        share.setId(shareId);
+
+        UUID slideId = UUID.randomUUID();
+        com.precued.entity.ShareSlide slide = new com.precued.entity.ShareSlide();
+        slide.setId(slideId);
+
+        ShareRoleGrant wholeShareGrant = new ShareRoleGrant();
+        wholeShareGrant.setId(UUID.randomUUID());
+        wholeShareGrant.setShare(share);
+        wholeShareGrant.setRoomRole(role);
+
+        ShareRoleGrant slideSpecificGrant = new ShareRoleGrant();
+        slideSpecificGrant.setId(UUID.randomUUID());
+        slideSpecificGrant.setShare(share);
+        slideSpecificGrant.setRoomRole(role);
+        slideSpecificGrant.setShareSlide(slide);
+
+        when(shareRoleGrantRepository.findByShareIdAndRevokedAtIsNull(shareId))
+                .thenReturn(List.of(wholeShareGrant, slideSpecificGrant));
+
+        var result = service.listGrants(shareId);
+
+        assertThat(result).hasSize(2);
+        assertThat(result.get(0).shareSlideId()).isNull();
+        assertThat(result.get(1).shareSlideId()).isEqualTo(slideId);
+    }
+
+    @Test
+    void listGrants_unknownShare_throwsIllegalArgumentException() {
+        UUID shareId = UUID.randomUUID();
+        when(shareRepository.existsById(shareId)).thenReturn(false);
+
+        assertThatThrownBy(() -> service.listGrants(shareId))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining(shareId.toString());
     }
 
     // ===== changeSlide — Chunk 1, Precued_DataModel.md "Presentations Feature" =====
