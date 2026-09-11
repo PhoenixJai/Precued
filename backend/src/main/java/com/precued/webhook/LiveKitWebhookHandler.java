@@ -20,10 +20,25 @@ import java.util.Optional;
 import java.util.UUID;
 
 /**
- * Dispatches the three LiveKit webhook events the trigger table (see
- * "VisibilityEngine — Interface Spec" in Precued_DataModel.md) reacts to.
- * Everything else LiveKit sends (room_started, egress_*, etc.) is ignored
- * here — this handler's only job is the VisibilityEngine triggers.
+ * Dispatches the four LiveKit webhook events the trigger table (see
+ * "VisibilityEngine — Interface Spec" in Precued_DataModel.md) reacts to,
+ * plus the RoomParticipant.leftAt / ShareTrack.unpublishedAt bookkeeping
+ * those same two events (participant_left, track_unpublished) are also the
+ * only source of truth for. Everything else LiveKit sends (room_started,
+ * egress_*, etc.) is ignored here — this handler's only job is the
+ * VisibilityEngine triggers.
+ *
+ * Reconnect note: resolveParticipant always resolves to the SAME
+ * RoomParticipant row for a given (roomId, livekitIdentity) —
+ * RoomParticipantService.join only ever creates a new row for a fresh
+ * REST /api/room-participants call, never for a LiveKit-protocol-level
+ * reconnect under an identity that already joined. LiveKit itself fires
+ * participant_left then participant_joined for the same identity on a full
+ * reconnect (after a resume window expires), so onParticipantJoined clears
+ * a stale leftAt on rejoin rather than leaving it set — ParticipantSessionInterceptor
+ * rejects every request from a leftAt-set participant's session token with
+ * nothing else able to ever clear it, so leaving it set would permanently
+ * lock a reconnected participant out of their own session.
  */
 @Component
 public class LiveKitWebhookHandler {
@@ -33,6 +48,7 @@ public class LiveKitWebhookHandler {
     private static final String PARTICIPANT_JOINED = "participant_joined";
     private static final String PARTICIPANT_LEFT = "participant_left";
     private static final String TRACK_PUBLISHED = "track_published";
+    private static final String TRACK_UNPUBLISHED = "track_unpublished";
 
     private final VisibilityEngine engine;
     private final RoomRepository roomRepository;
@@ -58,13 +74,23 @@ public class LiveKitWebhookHandler {
             case PARTICIPANT_JOINED -> onParticipantJoined(event);
             case PARTICIPANT_LEFT -> onParticipantLeft(event);
             case TRACK_PUBLISHED -> onTrackPublished(event);
+            case TRACK_UNPUBLISHED -> onTrackUnpublished(event);
             default -> { /* not one of the VisibilityEngine triggers */ }
         }
     }
 
     private void onParticipantJoined(WebhookEvent event) {
         UUID roomId = resolveRoomId(event.getRoom().getName());
-        UUID participantId = resolveParticipantId(roomId, event.getParticipant().getIdentity());
+        RoomParticipant participant = resolveParticipant(roomId, event.getParticipant().getIdentity());
+
+        // See class Javadoc: a full LiveKit reconnect under the same
+        // identity resolves back to this same row, with a leftAt a prior
+        // participant_left may have set. Clear it — they're back.
+        if (participant.getLeftAt() != null) {
+            participant.setLeftAt(null);
+            roomParticipantRepository.save(participant);
+        }
+        UUID participantId = participant.getId();
 
         // Every active Share in the room, for that one participant (trigger table).
         engine.recomputeAndPushForRoom(roomId);
@@ -79,6 +105,15 @@ public class LiveKitWebhookHandler {
 
     private void onParticipantLeft(WebhookEvent event) {
         UUID roomId = resolveRoomId(event.getRoom().getName());
+        RoomParticipant participant = resolveParticipant(roomId, event.getParticipant().getIdentity());
+
+        // Idempotent: a redelivered event must not push the timestamp
+        // forward on every retry.
+        if (participant.getLeftAt() == null) {
+            participant.setLeftAt(Instant.now());
+            roomParticipantRepository.save(participant);
+        }
+
         engine.recomputeAndPushForRoom(roomId);
     }
 
@@ -159,6 +194,29 @@ public class LiveKitWebhookHandler {
         engine.recomputeAndPushForShare(share.getId());
     }
 
+    private void onTrackUnpublished(WebhookEvent event) {
+        String trackSid = event.getTrack().getSid();
+
+        // The common case, not an edge case: only Share-tagged tracks
+        // (screen shares published with the "<shareId>:<label>" name, per
+        // onTrackPublished) ever get a ShareTrack row at all. Every base
+        // camera/mic track unpublish resolves to nothing here.
+        Optional<ShareTrack> existing = shareTrackRepository.findByLivekitTrackSid(trackSid);
+        if (existing.isEmpty()) {
+            return;
+        }
+
+        ShareTrack track = existing.get();
+        // Idempotent: a redelivered event must not push the timestamp
+        // forward on every retry.
+        if (track.getUnpublishedAt() == null) {
+            track.setUnpublishedAt(Instant.now());
+            shareTrackRepository.save(track);
+        }
+
+        engine.recomputeAndPushForShare(track.getShare().getId());
+    }
+
     private static ShareTrack.Kind mapTrackKind(LivekitModels.TrackType type) {
         return switch (type) {
             case AUDIO -> ShareTrack.Kind.AUDIO;
@@ -187,10 +245,6 @@ public class LiveKitWebhookHandler {
         return roomRepository.findByLivekitRoomName(livekitRoomName)
                 .map(Room::getId)
                 .orElseThrow(() -> new IllegalStateException("Unknown LiveKit room: " + livekitRoomName));
-    }
-
-    private UUID resolveParticipantId(UUID roomId, String livekitIdentity) {
-        return resolveParticipant(roomId, livekitIdentity).getId();
     }
 
     private RoomParticipant resolveParticipant(UUID roomId, String livekitIdentity) {
