@@ -45,6 +45,22 @@ public class Share {
     @Column(nullable = false, length = 16)
     private Status status = Status.ACTIVE;
 
+    /**
+     * NEW (Chunk 1, Precued_DataModel.md "Presentations Feature"). Existing
+     * rows/callers get SCREEN by default — unaffected.
+     */
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 16)
+    private Kind kind = Kind.SCREEN;
+
+    /**
+     * NEW (Chunk 1). Only meaningful when kind = PRESENTATION — the
+     * presenter's single live slide position, evaluated against every
+     * connected participant the same way (Decision #5).
+     */
+    @Column(name = "current_slide_index", nullable = false)
+    private int currentSlideIndex = 0;
+
     @Column(name = "started_at", nullable = false)
     private Instant startedAt;
 
@@ -52,4 +68,6 @@ public class Share {
     private Instant endedAt;
 
     public enum Status { ACTIVE, ENDED }
+
+    public enum Kind { SCREEN, PRESENTATION }
 }

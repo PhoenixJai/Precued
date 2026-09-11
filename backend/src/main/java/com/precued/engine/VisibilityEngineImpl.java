@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.precued.entity.ParticipantRoleAssignment;
 import com.precued.entity.RoomParticipant;
 import com.precued.entity.Share;
+import com.precued.entity.ShareRoleGrant;
 import com.precued.entity.ShareTrack;
 import com.precued.repository.ParticipantRoleAssignmentRepository;
 import com.precued.repository.RoomParticipantRepository;
@@ -81,25 +82,45 @@ public class VisibilityEngineImpl implements VisibilityEngine {
 
         return roomParticipantRepository.findByRoomId(share.getRoom().getId()).stream()
                 .filter(participant -> participant.getLeftAt() == null)
-                .map(participant -> toPermission(shareId, participant, trackSids))
+                .map(participant -> toPermission(share, participant, trackSids))
                 .toList();
     }
 
     private ParticipantTrackPermission toPermission(
-            UUID shareId, RoomParticipant participant, List<String> trackSids) {
+            Share share, RoomParticipant participant, List<String> trackSids) {
         Optional<ParticipantRoleAssignment> activeAssignment = participantRoleAssignmentRepository
                 .findByRoomParticipantIdAndRevokedAtIsNull(participant.getId());
 
         boolean allowed = activeAssignment.isPresent()
-                && shareRoleGrantRepository
-                        .findByShareIdAndRoomRoleIdAndRevokedAtIsNull(
-                                shareId, activeAssignment.get().getRoomRole().getId())
-                        .isPresent();
+                && isRoleAllowed(share, activeAssignment.get().getRoomRole().getId());
 
         return new ParticipantTrackPermission(
                 participant.getLivekitIdentity(),
                 allowed,
                 allowed ? trackSids : List.of());
+    }
+
+    /**
+     * Runtime Rule (Precued_DataModel.md), extended for slide-level
+     * visibility (Chunk 1). SCREEN-kind Shares never populate
+     * ShareRoleGrant.shareSlide, so they take the exact same "any active
+     * grant" path as before Chunk 1 — this extension changes nothing for
+     * them. A PRESENTATION-kind Share's role is allowed iff it holds an
+     * active grant with shareSlide == null (whole-share, unaffected
+     * existing behavior) OR an active grant whose slide is the one
+     * currently live.
+     */
+    private boolean isRoleAllowed(Share share, UUID roomRoleId) {
+        if (share.getKind() != Share.Kind.PRESENTATION) {
+            return shareRoleGrantRepository
+                    .findByShareIdAndRoomRoleIdAndRevokedAtIsNull(share.getId(), roomRoleId)
+                    .isPresent();
+        }
+
+        List<ShareRoleGrant> grants = shareRoleGrantRepository
+                .findAllByShareIdAndRoomRoleIdAndRevokedAtIsNull(share.getId(), roomRoleId);
+        return grants.stream().anyMatch(grant -> grant.getShareSlide() == null
+                || grant.getShareSlide().getSlideIndex() == share.getCurrentSlideIndex());
     }
 
     @Override

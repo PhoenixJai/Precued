@@ -259,4 +259,70 @@ class ShareLifecycleServiceTest {
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining(unknownRoomId.toString());
     }
+
+    // ===== changeSlide — Chunk 1, Precued_DataModel.md "Presentations Feature" =====
+
+    private Share givenPresentationShare(UUID shareId) {
+        RoomParticipant publisher = new RoomParticipant();
+        publisher.setId(publisherId);
+        Share share = new Share();
+        share.setId(shareId);
+        share.setStatus(Share.Status.ACTIVE);
+        share.setPublisher(publisher);
+        share.setKind(Share.Kind.PRESENTATION);
+        share.setCurrentSlideIndex(0);
+        when(shareRepository.findById(shareId)).thenReturn(Optional.of(share));
+        org.mockito.Mockito.lenient()
+                .when(shareRepository.save(any(Share.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+        return share;
+    }
+
+    @Test
+    void changeSlide_updatesIndexAndRecomputesForThatShare_whenCalledByPublisher() {
+        UUID shareId = UUID.randomUUID();
+        givenPresentationShare(shareId);
+
+        Share result = service.changeSlide(shareId, 2);
+
+        assertThat(result.getCurrentSlideIndex()).isEqualTo(2);
+        verify(engine).recomputeAndPushForShare(shareId);
+    }
+
+    @Test
+    void changeSlide_byNonPublisher_rejectsAndDoesNotUpdateOrRecompute() {
+        UUID shareId = UUID.randomUUID();
+        givenPresentationShare(shareId);
+
+        RoomParticipant someoneElse = new RoomParticipant();
+        someoneElse.setId(UUID.randomUUID());
+        CurrentParticipantContext.set(someoneElse);
+
+        assertThatThrownBy(() -> service.changeSlide(shareId, 2))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("Only the Share's publisher can change its slide");
+
+        verify(shareRepository, never()).save(any());
+        verify(engine, never()).recomputeAndPushForShare(any());
+    }
+
+    @Test
+    void changeSlide_onScreenKindShare_rejectsAndDoesNotUpdateOrRecompute() {
+        UUID shareId = UUID.randomUUID();
+        RoomParticipant publisher = new RoomParticipant();
+        publisher.setId(publisherId);
+        Share share = new Share();
+        share.setId(shareId);
+        share.setStatus(Share.Status.ACTIVE);
+        share.setPublisher(publisher);
+        // kind defaults to SCREEN
+        when(shareRepository.findById(shareId)).thenReturn(Optional.of(share));
+
+        assertThatThrownBy(() -> service.changeSlide(shareId, 1))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("Only a presentation-kind Share has slides");
+
+        verify(shareRepository, never()).save(any());
+        verify(engine, never()).recomputeAndPushForShare(any());
+    }
 }

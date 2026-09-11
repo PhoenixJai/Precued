@@ -143,6 +143,33 @@ public class ShareLifecycleService {
         return saved;
     }
 
+    /**
+     * Updates a PRESENTATION-kind Share's live slide position and runs a
+     * fresh compute+push for that one Share — the "Share.currentSlideIndex
+     * changed" row of the trigger table (Precued_DataModel.md §
+     * "VisibilityEngine — Interface Spec", Chunk 1), same pattern as a
+     * ShareRoleGrant change.
+     */
+    @Transactional
+    public Share changeSlide(UUID shareId, int newSlideIndex) {
+        Share share = shareRepository.findById(shareId)
+                .orElseThrow(() -> new IllegalArgumentException("No Share with id " + shareId));
+
+        if (!CurrentParticipantContext.get().getId().equals(share.getPublisher().getId())) {
+            throw new IllegalStateException("Only the Share's publisher can change its slide");
+        }
+
+        if (share.getKind() != Share.Kind.PRESENTATION) {
+            throw new IllegalStateException("Only a presentation-kind Share has slides");
+        }
+
+        share.setCurrentSlideIndex(newSlideIndex);
+        Share saved = shareRepository.save(share);
+
+        engine.recomputeAndPushForShare(shareId);
+        return saved;
+    }
+
     /** Currently-ACTIVE Shares in a room, each with the RoomRoles currently granted to it. */
     public List<ActiveShareResponse> listActive(UUID roomId) {
         if (!roomRepository.existsById(roomId)) {
