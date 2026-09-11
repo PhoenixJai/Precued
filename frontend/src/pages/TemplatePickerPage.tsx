@@ -2,7 +2,10 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { AppShell } from "../components/AppShell";
 import { api } from "../lib/api";
+import { findHostRole } from "../lib/roleSetup";
 import { getAuthSession, saveParticipant } from "../lib/session";
+import { templateName } from "../lib/templates";
+import type { TemplateId } from "../types/precued";
 
 const templateCards = [
   {
@@ -20,7 +23,7 @@ const templateCards = [
     description: "Structure a realistic trial experience with controlled visibility for each role.",
     roles: ["Judge", "Jury", "Defense", "Prosecution"],
     bullets: ["Role-specific information access", "Support for exhibits and evidence", "Designed for legal teams and education"],
-    functional: false,
+    functional: true,
     badge: undefined,
   },
   {
@@ -29,7 +32,7 @@ const templateCards = [
     description: "Facilitate structured academic debates with role-based visibility.",
     roles: ["Judge", "Affirmative", "Negative", "Audience"],
     bullets: ["Separate materials for each side", "Timed rounds and structure", "Ideal for education and competitions"],
-    functional: false,
+    functional: true,
     badge: undefined,
   },
 ] as const;
@@ -39,7 +42,7 @@ export default function TemplatePickerPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  async function useSalesCall() {
+  async function createAndJoinRoom(templateId: TemplateId) {
     const auth = getAuthSession();
     if (!auth) {
       navigate("/");
@@ -49,12 +52,12 @@ export default function TemplatePickerPage() {
     setLoading(true);
     setError(null);
     try {
-      const room = await api.createRoom("sales_call", auth.sessionToken);
+      const room = await api.createRoom(templateId, auth.sessionToken);
       const roles = await api.getRoomRoles(room.id);
-      const hostRole = roles.find((role) => role.roleKey === "sales_rep" && role.isHostRole);
-      if (!hostRole) throw new Error("Sales Rep host role was not created for this room.");
+      const hostRole = findHostRole(roles);
+      if (!hostRole) throw new Error(`No host role was created for this ${templateName(templateId)} room.`);
 
-      const displayName = auth.email.split("@")[0] || "Sales Rep";
+      const displayName = auth.email.split("@")[0] || "Host";
       const participant = await api.joinRoom(room.id, displayName, auth.userId, auth.sessionToken);
       // Save before assignRole: that call requires the session this join
       // just issued (ParticipantSessionInterceptor, backend), read from
@@ -108,7 +111,7 @@ export default function TemplatePickerPage() {
               </ul>
               <button
                 className={template.functional ? "primary-button wide" : "secondary-button wide"}
-                onClick={template.functional ? useSalesCall : undefined}
+                onClick={template.functional ? () => createAndJoinRoom(template.id) : undefined}
                 disabled={!template.functional || loading}
               >
                 {template.functional ? (loading ? "Creating room..." : "Use template  →") : "Coming soon"}

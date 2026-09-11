@@ -106,7 +106,7 @@ export default function AuthPage() {
               <input type="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="you@company.com" required />
             </label>
             <button className="primary-button wide" disabled={loading}>{loading ? "Working..." : "Email me a magic link  →"}</button>
-            <small>For Sales Rep hosts.</small>
+            <small>For session hosts.</small>
             {linkRequested && (
               <div className="demo-token-box">
                 <strong>Check your email for the magic link</strong>
