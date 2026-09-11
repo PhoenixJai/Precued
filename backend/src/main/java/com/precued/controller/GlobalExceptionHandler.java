@@ -1,12 +1,14 @@
 package com.precued.controller;
 
 import com.precued.security.AuthenticationRequiredException;
+import com.precued.service.PresentationUploadException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.multipart.MaxUploadSizeExceededException;
 
 import java.util.stream.Collectors;
 
@@ -47,5 +49,17 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(HttpMessageNotReadableException.class)
     public ProblemDetail handleUnreadableBody(HttpMessageNotReadableException e) {
         return ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "Malformed request body");
+    }
+
+    /** A PDF upload rejected for a reason the caller can fix — bad file type, too large, too many pages, corrupt. */
+    @ExceptionHandler(PresentationUploadException.class)
+    public ProblemDetail handleBadUpload(PresentationUploadException e) {
+        return ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, e.getMessage());
+    }
+
+    /** Defense in depth beneath PresentationUploadService's own size check — see application.yml's multipart cap. */
+    @ExceptionHandler(MaxUploadSizeExceededException.class)
+    public ProblemDetail handleUploadTooLarge(MaxUploadSizeExceededException e) {
+        return ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "File exceeds the maximum upload size");
     }
 }

@@ -68,6 +68,37 @@ public class ShareLifecycleService {
      */
     @Transactional
     public Share start(UUID roomId, UUID publisherParticipantId, UUID appliedPresetId, String label) {
+        RoomParticipant publisher = requireHostPublisher(roomId, publisherParticipantId);
+
+        TemplatePreset appliedPreset = appliedPresetId == null
+                ? null
+                : templatePresetRepository.findById(appliedPresetId)
+                        .orElseThrow(() -> new IllegalArgumentException(
+                                "No TemplatePreset with id " + appliedPresetId));
+
+        Share share = new Share();
+        share.setRoom(publisher.getRoom());
+        share.setPublisher(publisher);
+        share.setAppliedPreset(appliedPreset);
+        share.setLabel(label);
+        share.setStatus(Share.Status.ACTIVE);
+        share.setStartedAt(Instant.now());
+
+        Share saved = shareRepository.save(share);
+        engine.recomputeAndPushForShare(saved.getId());
+        return saved;
+    }
+
+    /**
+     * Resolves and validates the RoomParticipant who would publish a new
+     * Share: must exist, belong to roomId, be the caller themselves, and
+     * currently hold a host role. Shared by every "start a Share" flow
+     * (screen-share {@link #start}, presentation-upload
+     * {@link #startPresentation} via PresentationUploadService) so the
+     * host-role requirement ("must hold a host role" per the Share entity's
+     * own doc comment) is checked in exactly one place.
+     */
+    RoomParticipant requireHostPublisher(UUID roomId, UUID publisherParticipantId) {
         RoomParticipant publisher = roomParticipantRepository.findById(publisherParticipantId)
                 .orElseThrow(() -> new IllegalArgumentException(
                         "No RoomParticipant with id " + publisherParticipantId));
@@ -93,17 +124,25 @@ public class ShareLifecycleService {
                             + " does not hold a host role and cannot start a Share");
         }
 
-        TemplatePreset appliedPreset = appliedPresetId == null
-                ? null
-                : templatePresetRepository.findById(appliedPresetId)
-                        .orElseThrow(() -> new IllegalArgumentException(
-                                "No TemplatePreset with id " + appliedPresetId));
+        return publisher;
+    }
 
+    /**
+     * Creates and starts a PRESENTATION-kind Share from an already-validated
+     * publisher (see {@link #requireHostPublisher}) — the caller
+     * (PresentationUploadService) validates and renders the PDF first, so no
+     * Share row is created for an upload that ultimately fails validation.
+     * Fires the same "Share started" trigger as {@link #start}; the Share
+     * has no ShareSlide rows yet at this point, which is harmless since a
+     * fresh Share has no ShareRoleGrant rows yet either.
+     */
+    @Transactional
+    public Share startPresentation(RoomParticipant publisher, String label) {
         Share share = new Share();
         share.setRoom(publisher.getRoom());
         share.setPublisher(publisher);
-        share.setAppliedPreset(appliedPreset);
         share.setLabel(label);
+        share.setKind(Share.Kind.PRESENTATION);
         share.setStatus(Share.Status.ACTIVE);
         share.setStartedAt(Instant.now());
 

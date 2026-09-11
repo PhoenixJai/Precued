@@ -19,6 +19,15 @@ spring:
     enabled: true
     locations: classpath:db/migration
 
+  servlet:
+    multipart:
+      # Hard backstop before a request body is even fully read into memory —
+      # deliberately looser than precued.pdf.max-file-size-bytes below, which
+      # does the real, precisely-messaged rejection. Keep this above that
+      # value, never below it.
+      max-file-size: 50MB
+      max-request-size: 50MB
+
   mail:
     host: ${SMTP_HOST:}
     port: ${SMTP_PORT:587}
@@ -45,3 +54,13 @@ precued:
       token-ttl-minutes: 15
   invite:
     default-ttl-days: 7 # used when Invite.expires_at is not explicitly set and room hasn't ended
+  storage:
+    r2:
+      account-id: ${R2_ACCOUNT_ID:}
+      access-key-id: ${R2_ACCESS_KEY_ID:}
+      secret-access-key: ${R2_SECRET_ACCESS_KEY:}
+      bucket-name: ${R2_BUCKET_NAME:}
+  pdf:
+    max-file-size-bytes: 26214400 # 25 MB — keep <= spring.servlet.multipart.max-file-size above
+    max-pages: 100 # sync conversion has no job queue; this bounds one request's worst case
+    render-dpi: 150 # slide-quality default; higher = larger images and longer render time per page

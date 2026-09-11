@@ -306,6 +306,53 @@ class ShareLifecycleServiceTest {
         verify(engine, never()).recomputeAndPushForShare(any());
     }
 
+    // ===== startPresentation — Chunk 2, Precued_DataModel.md "Presentations Feature" =====
+
+    @Test
+    void startPresentation_createsPresentationKindShareAndRecomputes_whenPublisherHoldsHostRole() {
+        // startPresentation takes an already-validated RoomParticipant
+        // (the caller, PresentationUploadService, validates via
+        // requireHostPublisher before rendering the PDF) — no repository
+        // lookups happen inside startPresentation itself.
+        Room room = new Room();
+        room.setId(roomId);
+        RoomParticipant publisher = new RoomParticipant();
+        publisher.setId(publisherId);
+        publisher.setRoom(room);
+
+        UUID shareId = UUID.randomUUID();
+        when(shareRepository.save(any(Share.class))).thenAnswer(invocation -> {
+            Share share = invocation.getArgument(0);
+            share.setId(shareId);
+            return share;
+        });
+
+        Share result = service.startPresentation(publisher, "Q3 Deck");
+
+        assertThat(result.getId()).isEqualTo(shareId);
+        assertThat(result.getKind()).isEqualTo(Share.Kind.PRESENTATION);
+        assertThat(result.getStatus()).isEqualTo(Share.Status.ACTIVE);
+        assertThat(result.getLabel()).isEqualTo("Q3 Deck");
+        assertThat(result.getCurrentSlideIndex()).isEqualTo(0);
+        verify(engine).recomputeAndPushForShare(shareId);
+    }
+
+    @Test
+    void requireHostPublisher_rejectsPublisherWithNonHostRole_sameAsStart() {
+        givenPublisherInRoom();
+
+        RoomRole memberRole = new RoomRole();
+        memberRole.setHostRole(false);
+        ParticipantRoleAssignment assignment = new ParticipantRoleAssignment();
+        assignment.setRoomRole(memberRole);
+        when(assignmentRepository.findByRoomParticipantIdAndRevokedAtIsNull(publisherId))
+                .thenReturn(Optional.of(assignment));
+
+        assertThatThrownBy(() -> service.requireHostPublisher(roomId, publisherId))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("does not hold a host role");
+    }
+
     @Test
     void changeSlide_onScreenKindShare_rejectsAndDoesNotUpdateOrRecompute() {
         UUID shareId = UUID.randomUUID();
