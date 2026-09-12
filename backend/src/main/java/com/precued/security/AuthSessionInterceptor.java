@@ -5,6 +5,7 @@ import com.precued.entity.AuthSession;
 import com.precued.repository.AuthSessionRepository;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Component;
 import org.springframework.web.servlet.HandlerInterceptor;
@@ -49,6 +50,14 @@ public class AuthSessionInterceptor implements HandlerInterceptor {
     @Override
     public boolean preHandle(HttpServletRequest request, HttpServletResponse response, Object handler)
             throws IOException {
+        // A CORS preflight is a browser-generated OPTIONS request that never
+        // carries an Authorization header (or any app header at all beyond
+        // what the actual follow-up request will send) — rejecting it here
+        // would block the real, authenticated request from ever being sent.
+        // Spring's CORS handling (see WebMvcConfig) runs independently and
+        // still enforces which origins/methods are allowed.
+        if (HttpMethod.OPTIONS.matches(request.getMethod())) return true;
+
         String token = BearerTokenSupport.extractToken(request);
         if (token == null) {
             if (REQUIRED_PATHS.contains(request.getRequestURI())) {

@@ -46,6 +46,20 @@ class AuthSessionInterceptorTest {
     }
 
     @Test
+    void preHandle_optionsPreflight_allowsThroughWithNoAuthRequired() throws Exception {
+        // A CORS preflight is an OPTIONS request the browser sends with no
+        // Authorization header by design — even on a required path, this
+        // must never reject it, or the browser never gets to send the real
+        // (authenticated) request at all.
+        MockHttpServletRequest request = new MockHttpServletRequest("OPTIONS", "/api/rooms");
+        MockHttpServletResponse response = new MockHttpServletResponse();
+
+        boolean allowed = interceptor.preHandle(request, response, new Object());
+
+        assertThat(allowed).isTrue();
+    }
+
+    @Test
     void preHandle_requiredPath_missingHeader_rejects401() throws Exception {
         MockHttpServletRequest request = new MockHttpServletRequest("POST", "/api/rooms");
         MockHttpServletResponse response = new MockHttpServletResponse();
