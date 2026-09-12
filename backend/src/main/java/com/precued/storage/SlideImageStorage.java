@@ -8,6 +8,7 @@ import software.amazon.awssdk.core.sync.RequestBody;
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.model.GetObjectRequest;
 import software.amazon.awssdk.services.s3.model.GetObjectResponse;
+import software.amazon.awssdk.services.s3.model.NoSuchKeyException;
 import software.amazon.awssdk.services.s3.model.PutObjectRequest;
 
 import java.io.IOException;
@@ -54,6 +55,13 @@ public class SlideImageStorage {
         try (ResponseInputStream<GetObjectResponse> object =
                 s3Client.getObject(GetObjectRequest.builder().bucket(bucketName).key(key).build())) {
             return object.readAllBytes();
+        } catch (NoSuchKeyException e) {
+            // A real, observed failure mode: a page's upload can report success
+            // yet the object never lands (see PresentationUploadService's
+            // upload-then-verify step) — surfaced here as a clear, expected
+            // condition (mapped to 404 by GlobalExceptionHandler) rather than a
+            // bare, unhandled 500 with an AWS SDK exception leaking through.
+            throw new IllegalArgumentException("Slide image not found in storage: " + key, e);
         } catch (IOException e) {
             throw new IllegalStateException("Failed to read slide image " + key + " from storage", e);
         }

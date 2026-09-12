@@ -82,6 +82,21 @@ public class PresentationUploadService {
             String key = "shares/" + share.getId() + "/slides/" + slideIndex + ".png";
             slideImageStorage.upload(key, pageImage, "image/png");
 
+            // A write that reports success isn't proof it's actually there — a
+            // live incident showed an R2 upload return normally while the
+            // object was never retrievable, leaving a ShareSlide row pointing
+            // at nothing. Reading it back immediately turns that into a real,
+            // caught failure here (aborting the whole upload, per @Transactional
+            // above) instead of a viewer hitting it later as a bare 500.
+            try {
+                slideImageStorage.download(key);
+            } catch (IllegalArgumentException e) {
+                throw new PresentationUploadException(
+                        "Failed to verify slide " + (slideIndex + 1) + " was stored correctly"
+                                + " — please try uploading again",
+                        e);
+            }
+
             ShareSlide slide = new ShareSlide();
             slide.setShare(share);
             slide.setSlideIndex(slideIndex);

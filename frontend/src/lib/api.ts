@@ -73,6 +73,19 @@ export type SlideImageResult =
   | { ok: true; objectUrl: string }
   | { ok: false; status: number };
 
+/**
+ * A distinct, honest message for a slide image that genuinely doesn't exist
+ * in storage (404 — see SlideImageStorage's NoSuchKeyException handling on
+ * the backend) versus every other failure, which stays a generic
+ * status-carrying message since there's nothing more specific to say.
+ */
+export function describeSlideImageError(status: number): string {
+  if (status === 404) {
+    return "This slide's image is missing. Ask the host to re-upload the presentation.";
+  }
+  return `Unable to load slide (${status})`;
+}
+
 async function fetchSlideImage(shareId: string, slideIndex: number): Promise<SlideImageResult> {
   const participant = getParticipant();
   const response = await fetch(`${API_BASE}/api/shares/${shareId}/slides/${slideIndex}/image`, {

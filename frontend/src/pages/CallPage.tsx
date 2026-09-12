@@ -13,7 +13,7 @@ import {
 import { ConnectionState, RoomEvent, Track } from "livekit-client";
 import type { DataPacket_Kind, RemoteParticipant } from "livekit-client";
 import { AppShell, Brand } from "../components/AppShell";
-import { api } from "../lib/api";
+import { api, describeSlideImageError } from "../lib/api";
 import {
   clearShareGrantIds,
   forgetGrantId,
@@ -158,7 +158,7 @@ function CallExperience({ roomId }: { roomId: string }) {
     } else if (result.status === 403) {
       setSlideImage({ status: "locked" });
     } else {
-      setSlideImage({ status: "error", message: `Unable to load slide (${result.status})` });
+      setSlideImage({ status: "error", message: describeSlideImageError(result.status) });
     }
   }, []);
 
