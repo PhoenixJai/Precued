@@ -9,6 +9,7 @@ import com.precued.repository.ParticipantRoleAssignmentRepository;
 import com.precued.repository.RoomParticipantRepository;
 import com.precued.repository.ShareRepository;
 import com.precued.repository.ShareRoleGrantRepository;
+import com.precued.repository.ShareSlideRepository;
 import com.precued.repository.ShareTrackRepository;
 import io.livekit.server.RoomServiceClient;
 import livekit.LivekitModels;
@@ -53,6 +54,7 @@ class VisibilityEngineImplPushTest {
     @Mock private RoomParticipantRepository roomParticipantRepository;
     @Mock private ParticipantRoleAssignmentRepository participantRoleAssignmentRepository;
     @Mock private ShareRoleGrantRepository shareRoleGrantRepository;
+    @Mock private ShareSlideRepository shareSlideRepository;
     @Mock private RoomServiceClient roomServiceClient;
 
     private final ObjectMapper objectMapper = new ObjectMapper();
@@ -69,6 +71,7 @@ class VisibilityEngineImplPushTest {
                 roomParticipantRepository,
                 participantRoleAssignmentRepository,
                 shareRoleGrantRepository,
+                shareSlideRepository,
                 roomServiceClient,
                 objectMapper);
     }
