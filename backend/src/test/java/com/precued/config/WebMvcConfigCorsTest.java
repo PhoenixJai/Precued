@@ -7,6 +7,7 @@ import com.precued.service.TemplatePresetService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
+import org.springframework.context.annotation.Import;
 import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
@@ -25,6 +26,10 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * env-var-backed pattern as R2's account id/keys in StorageConfig.
  */
 @WebMvcTest(TemplateController.class)
+// Real SecurityConfig, not disabled — this slice now also genuinely
+// exercises the M-Auth OPTIONS-permitAll rule (@WebMvcTest doesn't pick up
+// plain @Configuration beans like SecurityConfig on its own).
+@Import(SecurityConfig.class)
 @TestPropertySource(properties = "precued.web.allowed-origin=https://gregarious-wonder-production-f37b.up.railway.app")
 class WebMvcConfigCorsTest {
 

@@ -2,7 +2,6 @@ package com.precued.security;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.precued.entity.RoomParticipant;
-import com.precued.repository.RoomParticipantRepository;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.http.HttpMethod;
@@ -16,13 +15,14 @@ import java.util.Map;
 import java.util.UUID;
 
 /**
- * Requires "Authorization: Bearer <sessionToken>" resolving to a
- * RoomParticipant that hasn't left, on every request this is applied to
- * (see WebMvcConfig for path patterns/exclusions). For a path carrying a
- * {roomId} variable, also requires the resolved participant to belong to
- * that room. For a /api/room-participants/{id}/... path, also requires the
- * resolved participant's own id to match {id} — you may only act as
- * yourself there.
+ * Path-based ownership checks for the RoomParticipant Spring Security's
+ * RoomParticipantAuthenticationFilter already authenticated (see that
+ * filter's Javadoc for the split — this interceptor no longer resolves the
+ * token or rejects a missing/invalid one itself; SecurityConfig's
+ * authorizeHttpRequests is the 401 gate now). For a path carrying a
+ * {roomId} variable, requires the resolved participant to belong to that
+ * room. For a /api/room-participants/{id}/... path, requires the resolved
+ * participant's own id to match {id} — you may only act as yourself there.
  *
  * A write whose target resource isn't named in the path (e.g. POST
  * /api/shares, where the Share's room/publisher are in the JSON body) can't
@@ -33,33 +33,25 @@ import java.util.UUID;
 @Component
 public class ParticipantSessionInterceptor implements HandlerInterceptor {
 
-    private final RoomParticipantRepository roomParticipantRepository;
     private final ObjectMapper objectMapper;
 
-    public ParticipantSessionInterceptor(
-            RoomParticipantRepository roomParticipantRepository, ObjectMapper objectMapper) {
-        this.roomParticipantRepository = roomParticipantRepository;
+    public ParticipantSessionInterceptor(ObjectMapper objectMapper) {
         this.objectMapper = objectMapper;
     }
 
     @Override
     public boolean preHandle(HttpServletRequest request, HttpServletResponse response, Object handler)
             throws IOException {
-        // See AuthSessionInterceptor's identical check for why: a CORS
-        // preflight OPTIONS request never carries an Authorization header,
-        // and Spring's own CORS handling (WebMvcConfig) already enforces
-        // which origins/methods are allowed independently of this.
+        // Same reasoning as SecurityConfig's OPTIONS permitAll rule: a CORS
+        // preflight never carries a session, so CurrentParticipantContext
+        // won't be populated for one — this must not be treated as "no
+        // ownership" on a protected path.
         if (HttpMethod.OPTIONS.matches(request.getMethod())) return true;
 
-        String token = BearerTokenSupport.extractToken(request);
-        if (token == null) {
-            return reject(response, HttpStatus.UNAUTHORIZED, "Missing or malformed Authorization header");
-        }
-
-        RoomParticipant participant = roomParticipantRepository.findBySessionToken(token).orElse(null);
-        if (participant == null || participant.getLeftAt() != null) {
-            return reject(response, HttpStatus.UNAUTHORIZED, "Invalid or expired session");
-        }
+        // Guaranteed non-null: SecurityConfig's authorizeHttpRequests only
+        // lets a request reach this interceptor's protected paths once
+        // RoomParticipantAuthenticationFilter has already authenticated it.
+        RoomParticipant participant = CurrentParticipantContext.get();
 
         @SuppressWarnings("unchecked")
         Map<String, String> pathVariables =
@@ -78,7 +70,6 @@ public class ParticipantSessionInterceptor implements HandlerInterceptor {
             }
         }
 
-        CurrentParticipantContext.set(participant);
         return true;
     }
 
