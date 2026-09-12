@@ -11,6 +11,7 @@ import com.precued.repository.ParticipantRoleAssignmentRepository;
 import com.precued.repository.RoomParticipantRepository;
 import com.precued.repository.ShareRepository;
 import com.precued.repository.ShareRoleGrantRepository;
+import com.precued.repository.ShareSlideRepository;
 import com.precued.repository.ShareTrackRepository;
 import io.livekit.server.RoomServiceClient;
 import org.junit.jupiter.api.BeforeEach;
@@ -42,6 +43,7 @@ class VisibilityEngineImplTest {
     @Mock private RoomParticipantRepository roomParticipantRepository;
     @Mock private ParticipantRoleAssignmentRepository participantRoleAssignmentRepository;
     @Mock private ShareRoleGrantRepository shareRoleGrantRepository;
+    @Mock private ShareSlideRepository shareSlideRepository;
     @Mock private RoomServiceClient roomServiceClient;
     @Mock private ObjectMapper objectMapper;
 
@@ -59,6 +61,7 @@ class VisibilityEngineImplTest {
                 roomParticipantRepository,
                 participantRoleAssignmentRepository,
                 shareRoleGrantRepository,
+                shareSlideRepository,
                 roomServiceClient,
                 objectMapper);
 

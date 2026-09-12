@@ -6,11 +6,13 @@ import com.precued.entity.ParticipantRoleAssignment;
 import com.precued.entity.RoomParticipant;
 import com.precued.entity.Share;
 import com.precued.entity.ShareRoleGrant;
+import com.precued.entity.ShareSlide;
 import com.precued.entity.ShareTrack;
 import com.precued.repository.ParticipantRoleAssignmentRepository;
 import com.precued.repository.RoomParticipantRepository;
 import com.precued.repository.ShareRepository;
 import com.precued.repository.ShareRoleGrantRepository;
+import com.precued.repository.ShareSlideRepository;
 import com.precued.repository.ShareTrackRepository;
 import io.livekit.server.RoomServiceClient;
 import livekit.LivekitModels;
@@ -50,6 +52,7 @@ public class VisibilityEngineImpl implements VisibilityEngine {
     private final RoomParticipantRepository roomParticipantRepository;
     private final ParticipantRoleAssignmentRepository participantRoleAssignmentRepository;
     private final ShareRoleGrantRepository shareRoleGrantRepository;
+    private final ShareSlideRepository shareSlideRepository;
     private final RoomServiceClient roomServiceClient;
     private final ObjectMapper objectMapper;
 
@@ -59,6 +62,7 @@ public class VisibilityEngineImpl implements VisibilityEngine {
             RoomParticipantRepository roomParticipantRepository,
             ParticipantRoleAssignmentRepository participantRoleAssignmentRepository,
             ShareRoleGrantRepository shareRoleGrantRepository,
+            ShareSlideRepository shareSlideRepository,
             RoomServiceClient roomServiceClient,
             ObjectMapper objectMapper) {
         this.shareRepository = shareRepository;
@@ -66,6 +70,7 @@ public class VisibilityEngineImpl implements VisibilityEngine {
         this.roomParticipantRepository = roomParticipantRepository;
         this.participantRoleAssignmentRepository = participantRoleAssignmentRepository;
         this.shareRoleGrantRepository = shareRoleGrantRepository;
+        this.shareSlideRepository = shareSlideRepository;
         this.roomServiceClient = roomServiceClient;
         this.objectMapper = objectMapper;
     }
@@ -119,8 +124,24 @@ public class VisibilityEngineImpl implements VisibilityEngine {
 
         List<ShareRoleGrant> grants = shareRoleGrantRepository
                 .findAllByShareIdAndRoomRoleIdAndRevokedAtIsNull(share.getId(), roomRoleId);
+        if (grants.isEmpty()) {
+            return false;
+        }
+
+        // grant.getShareSlide().getSlideIndex() would dereference a lazy
+        // Hibernate proxy outside any transaction (open-in-view is disabled)
+        // — the same class of bug LiveKitTokenService's own fix documents
+        // for a different association. .getId() on a lazy proxy is always
+        // safe (resolved from the FK column alone, no query needed); any
+        // other field requires an open session. Resolving the currently-live
+        // slide's id via its own repository call, then comparing only ids,
+        // avoids ever touching the grant's ShareSlide proxy beyond .getId().
+        UUID currentSlideId = shareSlideRepository
+                .findByShareIdAndSlideIndex(share.getId(), share.getCurrentSlideIndex())
+                .map(ShareSlide::getId)
+                .orElse(null);
         return grants.stream().anyMatch(grant -> grant.getShareSlide() == null
-                || grant.getShareSlide().getSlideIndex() == share.getCurrentSlideIndex());
+                || grant.getShareSlide().getId().equals(currentSlideId));
     }
 
     @Override
