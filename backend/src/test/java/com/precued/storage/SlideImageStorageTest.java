@@ -11,12 +11,14 @@ import software.amazon.awssdk.http.AbortableInputStream;
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.model.GetObjectRequest;
 import software.amazon.awssdk.services.s3.model.GetObjectResponse;
+import software.amazon.awssdk.services.s3.model.NoSuchKeyException;
 import software.amazon.awssdk.services.s3.model.PutObjectRequest;
 
 import java.io.ByteArrayInputStream;
 import java.nio.charset.StandardCharsets;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -56,5 +58,16 @@ class SlideImageStorageTest {
         byte[] result = storage.download("shares/abc/slides/0.png");
 
         assertThat(result).isEqualTo(content);
+    }
+
+    @Test
+    void download_noSuchKey_throwsClearIllegalArgumentExceptionRatherThanLeakingTheSdkException() {
+        SlideImageStorage storage = new SlideImageStorage(s3Client, BUCKET);
+        when(s3Client.getObject(any(GetObjectRequest.class)))
+                .thenThrow(NoSuchKeyException.builder().message("The specified key does not exist.").build());
+
+        assertThatThrownBy(() -> storage.download("shares/abc/slides/6.png"))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("shares/abc/slides/6.png");
     }
 }

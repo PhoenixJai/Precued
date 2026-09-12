@@ -140,6 +140,42 @@ class PresentationUploadServiceTest {
     }
 
     @Test
+    void pageWriteDoesNotVerify_abortsWholeUploadRatherThanLeavingAnOrphanedShareSlideRow() {
+        byte[] pdfBytes = "small-fake-pdf".getBytes(StandardCharsets.UTF_8);
+        MockMultipartFile file = new MockMultipartFile("file", "deck.pdf", "application/pdf", pdfBytes);
+
+        RoomParticipant publisher = publisher();
+        when(shareLifecycleService.requireHostPublisher(roomId, publisherId)).thenReturn(publisher);
+
+        byte[] page0 = "png-bytes-0".getBytes(StandardCharsets.UTF_8);
+        byte[] page1 = "png-bytes-1".getBytes(StandardCharsets.UTF_8);
+        when(pdfSlideRenderer.render(pdfBytes)).thenReturn(List.of(page0, page1));
+
+        UUID shareId = UUID.randomUUID();
+        Share share = new Share();
+        share.setId(shareId);
+        when(shareLifecycleService.startPresentation(publisher, "Deck")).thenReturn(share);
+
+        // Page 0's write verifies fine. Page 1's write silently didn't land in
+        // storage, exactly like the live NoSuchKeyException incident.
+        String firstKey = "shares/" + shareId + "/slides/0.png";
+        String secondKey = "shares/" + shareId + "/slides/1.png";
+        when(slideImageStorage.download(firstKey)).thenReturn(page0);
+        when(slideImageStorage.download(secondKey))
+                .thenThrow(new IllegalArgumentException("Slide image not found in storage: " + secondKey));
+
+        assertThatThrownBy(() -> service.upload(roomId, publisherId, "Deck", file))
+                .isInstanceOf(PresentationUploadException.class)
+                .hasMessageContaining("slide 2")
+                .hasMessageContaining("try uploading again");
+
+        // The loop must stop at the first unverified page — it never reaches
+        // page 1's save() call. (The @Transactional on upload() rolls back page
+        // 0's save() too, at the real DB layer — not exercised by this unit test.)
+        verify(shareSlideRepository, org.mockito.Mockito.times(1)).save(any());
+    }
+
+    @Test
     void blankLabel_fallsBackToOriginalFilename() {
         byte[] pdfBytes = "small-fake-pdf".getBytes(StandardCharsets.UTF_8);
         MockMultipartFile file = new MockMultipartFile("file", "quarterly-deck.pdf", "application/pdf", pdfBytes);
