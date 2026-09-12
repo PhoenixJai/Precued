@@ -12,6 +12,8 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.mail.SimpleMailMessage;
+import org.springframework.mail.javamail.JavaMailSender;
 
 import java.time.Instant;
 import java.util.Optional;
@@ -37,13 +39,19 @@ class AuthServiceTest {
     @Mock private MagicLinkTokenRepository magicLinkTokenRepository;
     @Mock private AuthSessionRepository authSessionRepository;
     @Mock private UserRepository userRepository;
+    @Mock private JavaMailSender mailSender;
 
     private AuthService authService;
 
     @BeforeEach
     void setUp() {
         authService = new AuthService(
-                magicLinkTokenRepository, authSessionRepository, userRepository, "http://localhost:5173");
+                magicLinkTokenRepository,
+                authSessionRepository,
+                userRepository,
+                mailSender,
+                "http://localhost:5173",
+                "Precued <noreply@example.com>");
     }
 
     @Test
@@ -62,6 +70,21 @@ class AuthServiceTest {
         ArgumentCaptor<MagicLinkToken> captor = ArgumentCaptor.forClass(MagicLinkToken.class);
         verify(magicLinkTokenRepository).save(captor.capture());
         assertThat(captor.getValue().getToken()).isEqualTo(result.getToken());
+    }
+
+    @Test
+    void generateMagicLink_sendsRealEmailContainingTheLink_neverJustLogsIt() {
+        when(magicLinkTokenRepository.save(any(MagicLinkToken.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        MagicLinkToken result = authService.generateMagicLink("host@example.com");
+
+        ArgumentCaptor<SimpleMailMessage> messageCaptor = ArgumentCaptor.forClass(SimpleMailMessage.class);
+        verify(mailSender).send(messageCaptor.capture());
+        SimpleMailMessage sent = messageCaptor.getValue();
+        assertThat(sent.getTo()).containsExactly("host@example.com");
+        assertThat(sent.getFrom()).isEqualTo("Precued <noreply@example.com>");
+        assertThat(sent.getText()).contains("http://localhost:5173?token=" + result.getToken());
     }
 
     @Test

@@ -7,7 +7,9 @@ import com.precued.service.RoomService;
 import com.precued.service.ShareLifecycleService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import com.precued.config.SecurityConfig;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
+import org.springframework.context.annotation.Import;
 import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
@@ -25,6 +27,11 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * both auth interceptors; this targets RoomController, which is not.
  */
 @WebMvcTest(RoomController.class)
+// Real SecurityConfig, not disabled — this slice now also genuinely
+// exercises the M-Auth OPTIONS-permitAll rule, the same PR #83 concern one
+// layer down (@WebMvcTest doesn't pick up plain @Configuration beans like
+// SecurityConfig on its own).
+@Import(SecurityConfig.class)
 @TestPropertySource(properties = "precued.web.allowed-origin=https://gregarious-wonder-production-f37b.up.railway.app")
 class RoomControllerCorsPreflightTest {
 

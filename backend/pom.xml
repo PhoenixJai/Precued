@@ -78,6 +78,14 @@
             <artifactId>spring-boot-starter-mail</artifactId>
         </dependency>
 
+        <!-- M-Auth: session enforcement on write endpoints (Precued_Issues_Update_3.md).
+             Replaces ad hoc 401 handling in the interceptors with the standard
+             framework's filter chain + authorizeHttpRequests. -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-security</artifactId>
+        </dependency>
+
         <!-- LiveKit server SDK: REST + JWT + webhook signature verification.
              Not as first-class as Node/Go/Python but the surface is plain
              HTTP — see docs/ADR-001-stack.md for the accepted trade-off. -->
@@ -136,6 +144,11 @@
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.security</groupId>
+            <artifactId>spring-security-test</artifactId>
             <scope>test</scope>
         </dependency>
 

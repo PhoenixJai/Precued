@@ -59,6 +59,11 @@ precued:
     magic-link:
       base-url: ${APP_BASE_URL:http://localhost:5173}
       token-ttl-minutes: 15
+      # Resend's SMTP relay uses the literal username "resend" and an API
+      # key as the password — see .env.example. onboarding@resend.dev works
+      # unverified for testing (delivers only to the account owner's own
+      # address); switch to a verified sending domain's address for real use.
+      from-address: ${MAIL_FROM_ADDRESS:onboarding@resend.dev}
   invite:
     default-ttl-days: 7 # used when Invite.expires_at is not explicitly set and room hasn't ended
   storage:

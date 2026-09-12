@@ -10,6 +10,8 @@ import com.precued.util.OpaqueTokenGenerator;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.mail.SimpleMailMessage;
+import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.stereotype.Service;
 
 import java.time.Duration;
@@ -20,11 +22,11 @@ import java.time.Instant;
  * participants, guest join (RoomParticipant.user_id == null) unchanged for
  * everyone else.
  *
- * Deliberately two separate steps: {@link #generateMagicLink} only ever
- * creates and stores a token — it has no opinion on delivery (email is out
- * of scope for this pass; see AuthController). {@link #verifyMagicLink} is
- * the only place a User gets created or a token gets consumed, and never
- * skips validation regardless of how it's called.
+ * Deliberately two separate steps: {@link #generateMagicLink} creates,
+ * stores, and emails the token via {@link JavaMailSender} (Resend's SMTP
+ * relay in production — see .env.example). {@link #verifyMagicLink} is the
+ * only place a User gets created or a token gets consumed, and never skips
+ * validation regardless of how it's called.
  *
  * Session tokens are opaque, DB-backed, random strings (same pattern as
  * Invite.token) rather than a self-contained signed JWT: nothing here needs
@@ -47,26 +49,33 @@ public class AuthService {
     private final MagicLinkTokenRepository magicLinkTokenRepository;
     private final AuthSessionRepository authSessionRepository;
     private final UserRepository userRepository;
+    private final JavaMailSender mailSender;
     private final String magicLinkBaseUrl;
+    private final String fromAddress;
 
     public AuthService(
             MagicLinkTokenRepository magicLinkTokenRepository,
             AuthSessionRepository authSessionRepository,
             UserRepository userRepository,
-            @Value("${precued.auth.magic-link.base-url}") String magicLinkBaseUrl) {
+            JavaMailSender mailSender,
+            @Value("${precued.auth.magic-link.base-url}") String magicLinkBaseUrl,
+            @Value("${precued.auth.magic-link.from-address}") String fromAddress) {
         this.magicLinkTokenRepository = magicLinkTokenRepository;
         this.authSessionRepository = authSessionRepository;
         this.userRepository = userRepository;
+        this.mailSender = mailSender;
         this.magicLinkBaseUrl = magicLinkBaseUrl;
+        this.fromAddress = fromAddress;
     }
 
     /**
-     * Step 1: generate + store only, then log the link server-side.
-     * Never returns or otherwise exposes the token to the HTTP caller —
-     * see AuthController's Javadoc for why (the requester and the email's
-     * owner are not necessarily the same person). Logging stands in for
-     * real email delivery (separate scope, spring-boot-starter-mail is
-     * already a dependency for when that lands).
+     * Step 1: generate + store, then actually email the link. Never returns
+     * or otherwise exposes the token to the HTTP caller — see
+     * AuthController's Javadoc for why (the requester and the email's owner
+     * are not necessarily the same person). The token is deliberately never
+     * logged either, now that email is the real delivery path: unlike the
+     * previous log-only stand-in, a token that reached this point is a live
+     * bearer credential, not a debugging convenience.
      */
     public MagicLinkToken generateMagicLink(String email) {
         MagicLinkToken magicLink = new MagicLinkToken();
@@ -76,7 +85,17 @@ public class AuthService {
         magicLink.setExpiresAt(Instant.now().plus(MAGIC_LINK_TTL));
         MagicLinkToken saved = magicLinkTokenRepository.save(magicLink);
 
-        log.info("Magic link for {}: {}?token={}", email, magicLinkBaseUrl, saved.getToken());
+        SimpleMailMessage message = new SimpleMailMessage();
+        message.setFrom(fromAddress);
+        message.setTo(email);
+        message.setSubject("Sign in to Precued");
+        message.setText("Click the link below to sign in to Precued:\n\n"
+                + magicLinkBaseUrl + "?token=" + saved.getToken()
+                + "\n\nThis link expires in 15 minutes and can only be used once. If you didn't"
+                + " request this, you can safely ignore this email.");
+        mailSender.send(message);
+
+        log.info("Magic link email sent to {}", email);
 
         return saved;
     }

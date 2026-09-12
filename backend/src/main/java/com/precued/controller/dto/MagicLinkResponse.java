@@ -7,7 +7,7 @@ import java.time.Instant;
  * credential for the recipient's email and must never appear in an API
  * response readable by whoever submitted the email (which may not be its
  * owner). See AuthService#generateMagicLink for where the token actually
- * goes (logged server-side; real email delivery is separate scope).
+ * goes (emailed to the recipient).
  */
 public record MagicLinkResponse(Instant expiresAt) {
 }

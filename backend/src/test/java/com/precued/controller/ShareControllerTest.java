@@ -8,7 +8,9 @@ import com.precued.repository.RoomParticipantRepository;
 import com.precued.service.ShareLifecycleService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import com.precued.config.SecurityConfig;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
+import org.springframework.context.annotation.Import;
 import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
@@ -33,6 +35,9 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * to authorize it, which is exactly what "you don't hold a host role" means.
  */
 @WebMvcTest(ShareController.class)
+// Real SecurityConfig, not disabled — @WebMvcTest doesn't pick up plain
+// @Configuration beans like SecurityConfig on its own.
+@Import(SecurityConfig.class)
 class ShareControllerTest {
 
     @Autowired private MockMvc mockMvc;

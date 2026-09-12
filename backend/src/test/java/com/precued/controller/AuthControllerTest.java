@@ -8,7 +8,9 @@ import com.precued.repository.RoomParticipantRepository;
 import com.precued.service.AuthService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import com.precued.config.SecurityConfig;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
+import org.springframework.context.annotation.Import;
 import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
@@ -23,6 +25,9 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @WebMvcTest(AuthController.class)
+// Real SecurityConfig, not disabled — @WebMvcTest doesn't pick up plain
+// @Configuration beans like SecurityConfig on its own.
+@Import(SecurityConfig.class)
 class AuthControllerTest {
 
     @Autowired private MockMvc mockMvc;
