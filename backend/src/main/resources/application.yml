@@ -44,6 +44,13 @@ server:
   port: ${PORT:8080}
 
 precued:
+  web:
+    # The frontend is deployed as a separate Railway service (a different
+    # origin from this backend), so every browser fetch to /api/** is
+    # cross-origin — see WebMvcConfig's addCorsMappings. Blank (the default)
+    # allows nothing extra; local dev doesn't need this, since Vite's dev
+    # proxy makes requests same-origin from the browser's perspective.
+    allowed-origin: ${FRONTEND_ORIGIN:}
   livekit:
     api-key: ${LIVEKIT_API_KEY:}
     api-secret: ${LIVEKIT_API_SECRET:}
