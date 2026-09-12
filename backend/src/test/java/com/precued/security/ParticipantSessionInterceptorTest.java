@@ -46,6 +46,18 @@ class ParticipantSessionInterceptorTest {
     }
 
     @Test
+    void preHandle_optionsPreflight_allowsThroughWithNoAuthRequired() throws Exception {
+        // Same reasoning as AuthSessionInterceptorTest's equivalent case: a
+        // CORS preflight never carries an Authorization header, on any path.
+        MockHttpServletRequest request = new MockHttpServletRequest("OPTIONS", "/api/rooms/" + UUID.randomUUID());
+        MockHttpServletResponse response = new MockHttpServletResponse();
+
+        boolean allowed = interceptor.preHandle(request, response, new Object());
+
+        assertThat(allowed).isTrue();
+    }
+
+    @Test
     void preHandle_missingAuthorizationHeader_rejects401() throws Exception {
         MockHttpServletRequest request = new MockHttpServletRequest("GET", "/api/rooms/" + UUID.randomUUID());
         MockHttpServletResponse response = new MockHttpServletResponse();
