@@ -16,11 +16,11 @@ import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * No real email delivery yet — AuthService#generateMagicLink logs the
- * magic-link URL server-side (INFO) instead. The token itself is never
- * returned from /magic-link: the caller only proves they received it by
- * successfully calling /verify with it, which is the whole point of a
- * magic link (whoever submitted the email is not necessarily its owner).
+ * AuthService#generateMagicLink emails the link (Resend's SMTP relay, see
+ * .env.example). The token itself is never returned from /magic-link: the
+ * caller only proves they received it by successfully calling /verify with
+ * it, which is the whole point of a magic link (whoever submitted the email
+ * is not necessarily its owner).
  */
 @RestController
 @RequestMapping("/api/auth")
