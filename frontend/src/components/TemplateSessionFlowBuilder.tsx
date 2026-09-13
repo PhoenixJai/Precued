@@ -1,8 +1,10 @@
 import { useEffect, useState } from "react";
 import { api } from "../lib/api";
 import {
+  cloneStageDraft,
   moveStage,
   nextStageKey,
+  restoreStageDraft,
   validateTemplateFlowDraft,
   type TemplateFlowStageDraft,
 } from "../lib/templateSessionFlowBuilder";
@@ -21,6 +23,8 @@ export function TemplateSessionFlowBuilder(props: {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [savedNotice, setSavedNotice] = useState(false);
+  const [editingStageIndex, setEditingStageIndex] = useState<number | null>(null);
+  const [editingStageOriginal, setEditingStageOriginal] = useState<TemplateFlowStageDraft | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -64,6 +68,8 @@ export function TemplateSessionFlowBuilder(props: {
         durationSeconds: stage.durationSeconds,
         templateRoleIds: [...stage.templateRoleIds],
       })));
+    setEditingStageIndex(null);
+    setEditingStageOriginal(null);
   }
 
   function addStage() {
@@ -96,6 +102,27 @@ export function TemplateSessionFlowBuilder(props: {
         ? stage.templateRoleIds.filter((id) => id !== roleId)
         : [...stage.templateRoleIds, roleId],
     });
+  }
+
+  function beginStageEdit(index: number) {
+    setEditingStageIndex(index);
+    setEditingStageOriginal(cloneStageDraft(stages[index]));
+    setError(null);
+  }
+
+  function finishStageEdit() {
+    setEditingStageIndex(null);
+    setEditingStageOriginal(null);
+    setSavedNotice(false);
+  }
+
+  function cancelStageEdit() {
+    if (editingStageIndex !== null && editingStageOriginal) {
+      setStages((current) => restoreStageDraft(current, editingStageIndex, editingStageOriginal));
+    }
+    setEditingStageIndex(null);
+    setEditingStageOriginal(null);
+    setSavedNotice(false);
   }
 
   async function saveFlow() {
@@ -152,8 +179,10 @@ export function TemplateSessionFlowBuilder(props: {
         </label>
       </div>
 
-      <p className="flow-builder-note">
-        Disabling Session Flow does not delete your stages. New rooms snapshot this configuration when they are created.
+      <p className={`flow-builder-note${enabled ? "" : " flow-builder-note-warning"}`}>
+        {enabled
+          ? "New rooms snapshot this Session Flow when they are created. Existing rooms keep their original snapshot."
+          : "Stages can stay saved while Session Flow is disabled, but they will not appear in live calls. Enable Session Flow, save it, then create a new room to use the stages."}
       </p>
 
       {!loaded ? (
@@ -161,85 +190,108 @@ export function TemplateSessionFlowBuilder(props: {
       ) : (
         <>
           <div className="flow-stage-list">
-            {stages.map((stage, index) => (
-              <article className="flow-stage-editor" key={stage.id ?? stage.stageKey}>
-                <div className="flow-stage-editor-top">
-                  <div>
-                    <strong>Stage {index + 1}</strong>
-                    <small>{stage.stageKey}</small>
-                  </div>
-                  <div className="flow-stage-order-actions">
-                    <button
-                      className="secondary-button compact"
-                      disabled={saving || index === 0}
-                      onClick={() => { setStages(moveStage(stages, index, index - 1)); setSavedNotice(false); }}
-                    >↑</button>
-                    <button
-                      className="secondary-button compact"
-                      disabled={saving || index === stages.length - 1}
-                      onClick={() => { setStages(moveStage(stages, index, index + 1)); setSavedNotice(false); }}
-                    >↓</button>
-                    <button
-                      className="text-button flow-remove-stage"
-                      disabled={saving}
-                      onClick={() => { setStages(stages.filter((_, stageIndex) => stageIndex !== index)); setSavedNotice(false); }}
-                    >Remove</button>
-                  </div>
-                </div>
+            {stages.map((stage, index) => {
+              const isSavedStage = stage.id !== null;
+              const isEditing = !isSavedStage || editingStageIndex === index;
+              const anotherStageIsEditing = editingStageIndex !== null && editingStageIndex !== index;
 
-                <div className="flow-stage-fields">
-                  <label>
-                    Stage name
-                    <input
-                      value={stage.name}
-                      disabled={saving}
-                      onChange={(event) => updateStage(index, { name: event.target.value })}
-                    />
-                  </label>
-                  <label>
-                    Timer in seconds <span>(optional)</span>
-                    <input
-                      type="number"
-                      min={1}
-                      step={1}
-                      placeholder="Untimed"
-                      disabled={saving}
-                      value={stage.durationSeconds ?? ""}
-                      onChange={(event) => updateStage(index, {
-                        durationSeconds: event.target.value === "" ? null : Number(event.target.value),
-                      })}
-                    />
-                  </label>
-                </div>
-
-                <div className="flow-role-picker">
-                  <strong>Active roles</strong>
-                  {props.roles.length === 0 ? (
-                    <small>Add template roles before assigning a stage.</small>
-                  ) : (
-                    <div className="flow-role-options">
-                      {props.roles.map((role) => (
-                        <label key={role.id} className="flow-role-option">
-                          <input
-                            type="checkbox"
-                            disabled={saving}
-                            checked={stage.templateRoleIds.includes(role.id)}
-                            onChange={() => toggleStageRole(index, role.id)}
-                          />
-                          <span>{role.name}{role.isHostRole ? " · Host" : ""}</span>
-                        </label>
-                      ))}
+              return (
+                <article className={`flow-stage-editor${isSavedStage && !isEditing ? " flow-stage-editor-readonly" : ""}`} key={stage.id ?? stage.stageKey}>
+                  <div className="flow-stage-editor-top">
+                    <div>
+                      <strong>Stage {index + 1}</strong>
+                      <small>{stage.stageKey}</small>
                     </div>
+                    <div className="flow-stage-order-actions">
+                      {isSavedStage && !isEditing && (
+                        <button
+                          className="secondary-button compact flow-edit-stage"
+                          disabled={saving || editingStageIndex !== null}
+                          onClick={() => beginStageEdit(index)}
+                        >Edit</button>
+                      )}
+                      {isSavedStage && editingStageIndex === index && (
+                        <>
+                          <button className="secondary-button compact" disabled={saving} onClick={finishStageEdit}>Done editing</button>
+                          <button className="text-button" disabled={saving} onClick={cancelStageEdit}>Cancel</button>
+                        </>
+                      )}
+                      <button
+                        className="secondary-button compact"
+                        disabled={saving || anotherStageIsEditing || editingStageIndex === index || index === 0}
+                        onClick={() => { setStages(moveStage(stages, index, index - 1)); setSavedNotice(false); }}
+                      >↑</button>
+                      <button
+                        className="secondary-button compact"
+                        disabled={saving || anotherStageIsEditing || editingStageIndex === index || index === stages.length - 1}
+                        onClick={() => { setStages(moveStage(stages, index, index + 1)); setSavedNotice(false); }}
+                      >↓</button>
+                      <button
+                        className="text-button flow-remove-stage"
+                        disabled={saving || editingStageIndex !== null}
+                        onClick={() => { setStages(stages.filter((_, stageIndex) => stageIndex !== index)); setSavedNotice(false); }}
+                      >Remove</button>
+                    </div>
+                  </div>
+
+                  {isSavedStage && editingStageIndex === index && (
+                    <p className="flow-editing-note">Editing this stage. Click “Done editing” to keep the draft, then “Save Session Flow” to persist it. Cancel restores the last saved values.</p>
                   )}
-                </div>
-              </article>
-            ))}
+
+                  <div className="flow-stage-fields">
+                    <label>
+                      Stage name
+                      <input
+                        value={stage.name}
+                        disabled={saving || !isEditing}
+                        onChange={(event) => updateStage(index, { name: event.target.value })}
+                      />
+                    </label>
+                    <label>
+                      Timer in seconds <span>(optional)</span>
+                      <input
+                        type="number"
+                        min={1}
+                        step={1}
+                        placeholder="Untimed"
+                        disabled={saving || !isEditing}
+                        value={stage.durationSeconds ?? ""}
+                        onChange={(event) => updateStage(index, {
+                          durationSeconds: event.target.value === "" ? null : Number(event.target.value),
+                        })}
+                      />
+                    </label>
+                  </div>
+
+                  <div className="flow-role-picker">
+                    <strong>Active roles</strong>
+                    {props.roles.length === 0 ? (
+                      <small>Add template roles before assigning a stage.</small>
+                    ) : (
+                      <div className="flow-role-options">
+                        {props.roles.map((role) => (
+                          <label key={role.id} className="flow-role-option">
+                            <input
+                              type="checkbox"
+                              disabled={saving || !isEditing}
+                              checked={stage.templateRoleIds.includes(role.id)}
+                              onChange={() => toggleStageRole(index, role.id)}
+                            />
+                            <span>{role.name}{role.isHostRole ? " · Host" : ""}</span>
+                          </label>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </article>
+              );
+            })}
           </div>
 
           <div className="flow-add-stage-row">
             <input
               value={newStageName}
-              disabled={saving}
+              disabled={saving || editingStageIndex !== null}
               placeholder="e.g. Candidate Questions"
               onChange={(event) => setNewStageName(event.target.value)}
               onKeyDown={(event) => {
@@ -249,7 +301,7 @@ export function TemplateSessionFlowBuilder(props: {
                 }
               }}
             />
-            <button className="secondary-button" disabled={saving || !newStageName.trim()} onClick={addStage}>＋ Add stage</button>
+            <button className="secondary-button" disabled={saving || editingStageIndex !== null || !newStageName.trim()} onClick={addStage}>＋ Add stage</button>
           </div>
 
           {stages.length === 0 && (
