@@ -16,6 +16,8 @@ import org.springframework.stereotype.Service;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * Hybrid auth per Issue #1's resolution: magic link required for host-role
@@ -59,13 +61,36 @@ public class AuthService {
             UserRepository userRepository,
             JavaMailSender mailSender,
             @Value("${precued.auth.magic-link.base-url}") String magicLinkBaseUrl,
-            @Value("${precued.auth.magic-link.from-address}") String fromAddress) {
+            @Value("${precued.auth.magic-link.from-address}") String fromAddress,
+            @Value("${spring.mail.host:}") String smtpHost,
+            @Value("${spring.mail.username:}") String smtpUsername,
+            @Value("${spring.mail.password:}") String smtpPassword) {
         this.magicLinkTokenRepository = magicLinkTokenRepository;
         this.authSessionRepository = authSessionRepository;
         this.userRepository = userRepository;
         this.mailSender = mailSender;
         this.magicLinkBaseUrl = magicLinkBaseUrl;
         this.fromAddress = fromAddress;
+
+        // Live incident: SMTP_PASSWORD reached JavaMailSenderImpl blank in
+        // production despite being confirmed set in Railway — found only by
+        // reading a raw jakarta.mail.AuthenticationFailedException stack
+        // trace from an actual failed send. This surfaces the same
+        // condition at boot instead, so a misconfigured/misscoped Railway
+        // variable shows up in the startup log immediately, not on the
+        // first user-facing failure. Never logs a credential's actual value.
+        List<String> blank = blankSmtpCredentialNames(smtpHost, smtpUsername, smtpPassword);
+        if (!blank.isEmpty()) {
+            log.warn("Blank at startup, magic-link emails will fail to send: {}", blank);
+        }
+    }
+
+    static List<String> blankSmtpCredentialNames(String host, String username, String password) {
+        List<String> blank = new ArrayList<>();
+        if (host.isBlank()) blank.add("SMTP_HOST");
+        if (username.isBlank()) blank.add("SMTP_USER");
+        if (password.isBlank()) blank.add("SMTP_PASSWORD");
+        return blank;
     }
 
     /**

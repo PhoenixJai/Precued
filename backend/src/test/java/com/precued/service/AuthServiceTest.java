@@ -51,7 +51,24 @@ class AuthServiceTest {
                 userRepository,
                 mailSender,
                 "http://localhost:5173",
-                "Precued <noreply@example.com>");
+                "Precued <noreply@example.com>",
+                "smtp.resend.com",
+                "resend",
+                "a-real-api-key");
+    }
+
+    @Test
+    void blankSmtpCredentialNames_reportsOnlyTheBlankOnes() {
+        // Live incident: SMTP_PASSWORD reached JavaMailSenderImpl blank
+        // despite being confirmed set in Railway, tracked down only by
+        // reading a raw stack trace. This surfaces the same condition at
+        // boot instead, without ever logging a credential's actual value.
+        assertThat(AuthService.blankSmtpCredentialNames("", "", ""))
+                .containsExactly("SMTP_HOST", "SMTP_USER", "SMTP_PASSWORD");
+        assertThat(AuthService.blankSmtpCredentialNames("smtp.resend.com", "resend", ""))
+                .containsExactly("SMTP_PASSWORD");
+        assertThat(AuthService.blankSmtpCredentialNames("smtp.resend.com", "resend", "key"))
+                .isEmpty();
     }
 
     @Test
