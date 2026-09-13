@@ -21,6 +21,7 @@ import {
   getParticipant,
   rememberGrantId,
 } from "../lib/session";
+import { derivePresentationLabel, validatePresentationFile } from "../lib/presentationUpload";
 import { templateName } from "../lib/templates";
 import {
   computeLocalVisibilityGrants,
@@ -47,8 +48,6 @@ type SlideImageState =
   | { status: "visible"; objectUrl: string }
   | { status: "locked" }
   | { status: "error"; message: string };
-
-const MAX_CLIENT_UPLOAD_WARN_BYTES = 25 * 1024 * 1024; // matches precued.pdf.max-file-size-bytes (backend) — a UX nicety, not a security boundary; the server enforces the real cap.
 
 const POLL_MS = 1500;
 
@@ -340,15 +339,16 @@ function CallExperience({ roomId }: { roomId: string }) {
     ? currentShare.kind === "SCREEN" ? canSeeCurrentShare : slideImage.status === "visible"
     : false;
 
+  async function uploadNewPresentation(file: File) {
+    await api.uploadPresentation(roomId, me.id, derivePresentationLabel(file.name), file);
+    await refresh();
+  }
+
   async function uploadPresentationFile(file: File) {
     if (!me.isHost || currentShare) return;
-    const looksLikePdf = file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf");
-    if (!looksLikePdf) {
-      setUploadError("Please choose a PDF file.");
-      return;
-    }
-    if (file.size > MAX_CLIENT_UPLOAD_WARN_BYTES) {
-      setUploadError("This file is larger than 25 MB and the server will likely reject it.");
+    const validationError = validatePresentationFile(file);
+    if (validationError) {
+      setUploadError(validationError);
       return;
     }
     setUploadError(null);
@@ -356,9 +356,7 @@ function CallExperience({ roomId }: { roomId: string }) {
     setError(null);
     setMoreOpen(false);
     try {
-      const label = file.name.replace(/\.pdf$/i, "") || "Presentation";
-      await api.uploadPresentation(roomId, me.id, label, file);
-      await refresh();
+      await uploadNewPresentation(file);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to upload presentation");
     } finally {
@@ -366,11 +364,58 @@ function CallExperience({ roomId }: { roomId: string }) {
     }
   }
 
-  function handlePresentationDrop(event: DragEvent<HTMLDivElement>) {
-    if (!me.isHost || currentShare) return;
+  /**
+   * Ends the current PRESENTATION Share and starts a brand new one, rather
+   * than swapping slides under the same Share id — ShareRoleGrant rows are
+   * scoped by (shareId, shareSlideId), and there's no mechanism anywhere in
+   * this codebase for reassigning them onto a new slide set, so any grant
+   * left over from the old document would either dangle or (worse) silently
+   * keep the old document's visibility choices applied to unrelated new
+   * content. Ending and restarting is also exactly what the existing
+   * stopScreenShare/startScreenShare pair already does for a SCREEN share,
+   * so this follows the grain of the data model rather than adding a new
+   * one (see Share's own doc comment: "one instance of a host sharing
+   * something").
+   */
+  async function replacePresentationFile(file: File) {
+    if (!me.isHost || currentShare?.kind !== "PRESENTATION") return;
+    const validationError = validatePresentationFile(file);
+    if (validationError) {
+      setUploadError(validationError);
+      return;
+    }
+    setUploadError(null);
+    setBusy(true);
+    setError(null);
+    setMoreOpen(false);
+    try {
+      await api.endShare(currentShare.id);
+      clearShareGrantIds(currentShare.id);
+      await uploadNewPresentation(file);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unable to replace the document");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  /**
+   * Live incident: with no handler at all on an active share, a browser
+   * treats an unhandled file drop as a navigation — dropping a file onto a
+   * live call could silently kick the host (or anyone) out of it entirely.
+   * preventDefault() always runs, for every participant, regardless of
+   * whether an upload/replace action actually happens below.
+   */
+  function handleShareStageDrop(event: DragEvent<HTMLDivElement>) {
     event.preventDefault();
+    if (!me.isHost) return;
     const file = event.dataTransfer.files?.[0];
-    if (file) void uploadPresentationFile(file);
+    if (!file) return;
+    if (!currentShare) {
+      void uploadPresentationFile(file);
+    } else if (currentShare.kind === "PRESENTATION") {
+      void replacePresentationFile(file);
+    }
   }
 
   async function goToSlide(slideIndex: number) {
@@ -519,7 +564,10 @@ function CallExperience({ roomId }: { roomId: string }) {
               style={{ display: "none" }}
               onChange={(event) => {
                 const file = event.target.files?.[0];
-                if (file) void uploadPresentationFile(file);
+                if (file) {
+                  if (currentShare?.kind === "PRESENTATION") void replacePresentationFile(file);
+                  else void uploadPresentationFile(file);
+                }
                 event.target.value = "";
               }}
             />
@@ -557,13 +605,13 @@ function CallExperience({ roomId }: { roomId: string }) {
               <div className="visible-banner"><span>◉</span><div><strong>Visible to your role</strong><small>{currentShare.kind === "SCREEN" ? `This content is currently shared with ${formatRoleNames(visibleRoleNames)}.` : "This slide is currently visible to your role."}</small></div></div>
             ) : null}
 
-            <div className={`share-stage ${(currentShare?.kind === "SCREEN" && !canSeeCurrentShare && !me.isHost) || (currentShare?.kind === "PRESENTATION" && !me.isHost && slideImage.status === "locked") ? "locked-stage" : ""}`}>
+            <div
+              className={`share-stage ${(currentShare?.kind === "SCREEN" && !canSeeCurrentShare && !me.isHost) || (currentShare?.kind === "PRESENTATION" && !me.isHost && slideImage.status === "locked") ? "locked-stage" : ""}`}
+              onDragOver={(event) => event.preventDefault()}
+              onDrop={handleShareStageDrop}
+            >
               {!currentShare ? (
-                <div
-                  className="empty-share-state"
-                  onDragOver={(event) => { if (me.isHost) event.preventDefault(); }}
-                  onDrop={handlePresentationDrop}
-                >
+                <div className="empty-share-state">
                   <div className="lock-or-share-icon">▣</div>
                   <h2>{me.isHost ? "Ready to share" : "Waiting for shared content"}</h2>
                   <p>{me.isHost ? "Open More to share your screen, or drop a PDF here to share a presentation." : "Shared content will appear here when the host starts sharing."}</p>
@@ -572,7 +620,6 @@ function CallExperience({ roomId }: { roomId: string }) {
                       ▤ Share a presentation
                     </button>
                   )}
-                  {uploadError && <div className="error-banner">{uploadError}</div>}
                 </div>
               ) : currentShare.kind === "PRESENTATION" ? (
                 slideImage.status === "visible" ? (
@@ -615,6 +662,10 @@ function CallExperience({ roomId }: { roomId: string }) {
                 </>
               )}
             </div>
+            {/* Rendered outside the branches above, not inside empty-share-state:
+                a validation failure on a mid-share Replace document (unlike a
+                fresh upload) happens while that branch no longer exists. */}
+            {uploadError && <div className="error-banner">{uploadError}</div>}
 
             <div className="video-strip">
               {participants.filter((participant) => !participant.leftAt).map((participant) => {
@@ -649,6 +700,7 @@ function CallExperience({ roomId }: { roomId: string }) {
             onStartShare={() => { void startScreenShare(); }}
             onStopShare={() => { void stopScreenShare(); }}
             onSharePresentation={() => fileInputRef.current?.click()}
+            onReplaceDocument={() => fileInputRef.current?.click()}
             busy={busy}
           />
         </div>
@@ -676,6 +728,7 @@ function ParticipantsSidebar(props: {
   onStartShare: () => void;
   onStopShare: () => void;
   onSharePresentation: () => void;
+  onReplaceDocument: () => void;
   busy: boolean;
 }) {
   const roleById = new Map(props.roles.map((role) => [role.id, role]));
@@ -712,7 +765,12 @@ function ParticipantsSidebar(props: {
           {props.moreOpen && props.isHost && (
             <div className="more-menu">
               {props.currentShare ? (
-                <button disabled={props.busy} onClick={props.onStopShare}>Stop sharing</button>
+                <>
+                  {props.currentShare.kind === "PRESENTATION" && (
+                    <button disabled={props.busy} onClick={props.onReplaceDocument}>Replace document</button>
+                  )}
+                  <button disabled={props.busy} onClick={props.onStopShare}>Stop sharing</button>
+                </>
               ) : (
                 <>
                   <button disabled={props.busy} onClick={props.onStartShare}>Share screen</button>
