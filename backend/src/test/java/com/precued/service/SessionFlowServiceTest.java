@@ -168,8 +168,12 @@ class SessionFlowServiceTest {
     @Test
     void start_nonHostIsRejected() {
         hostRole.setHostRole(false);
-        RoomStage first = stage("opening", 0, RoomStage.Status.PENDING, 120);
-        stubLockedRoomWithHost(List.of(first));
+        when(roomRepository.findByIdForUpdate(room.getId())).thenReturn(Optional.of(room));
+        ParticipantRoleAssignment assignment = new ParticipantRoleAssignment();
+        assignment.setRoomParticipant(participant);
+        assignment.setRoomRole(hostRole);
+        when(assignmentRepository.findByRoomParticipantIdAndRevokedAtIsNull(participant.getId()))
+                .thenReturn(Optional.of(assignment));
 
         assertThatThrownBy(() -> service.start(room.getId()))
                 .isInstanceOf(IllegalStateException.class)
