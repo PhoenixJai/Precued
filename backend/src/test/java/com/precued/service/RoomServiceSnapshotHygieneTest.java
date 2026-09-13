@@ -7,8 +7,12 @@ import com.precued.entity.TemplateRole;
 import com.precued.entity.User;
 import com.precued.repository.RoomRepository;
 import com.precued.repository.RoomRoleRepository;
+import com.precued.repository.RoomStageRepository;
+import com.precued.repository.RoomStageRoleRepository;
 import com.precued.repository.TemplateRepository;
 import com.precued.repository.TemplateRoleRepository;
+import com.precued.repository.TemplateStageRepository;
+import com.precued.repository.TemplateStageRoleRepository;
 import com.precued.repository.UserRepository;
 import com.precued.security.CurrentUserContext;
 import org.junit.jupiter.api.AfterEach;
@@ -34,8 +38,12 @@ class RoomServiceSnapshotHygieneTest {
 
     @Mock private RoomRepository roomRepository;
     @Mock private RoomRoleRepository roomRoleRepository;
+    @Mock private RoomStageRepository roomStageRepository;
+    @Mock private RoomStageRoleRepository roomStageRoleRepository;
     @Mock private TemplateRepository templateRepository;
     @Mock private TemplateRoleRepository templateRoleRepository;
+    @Mock private TemplateStageRepository templateStageRepository;
+    @Mock private TemplateStageRoleRepository templateStageRoleRepository;
     @Mock private UserRepository userRepository;
 
     @AfterEach
@@ -51,6 +59,7 @@ class RoomServiceSnapshotHygieneTest {
 
         Template template = builtInTemplate("mock_trial");
         when(templateRepository.findById(template.getId())).thenReturn(Optional.of(template));
+        when(templateStageRepository.findByTemplateIdOrderBySortOrder(template.getId())).thenReturn(List.of());
 
         TemplateRole guest = new TemplateRole();
         guest.setId(UUID.randomUUID());
@@ -88,6 +97,7 @@ class RoomServiceSnapshotHygieneTest {
         Template template = customTemplate(owner);
         when(templateRepository.findById(template.getId())).thenReturn(Optional.of(template));
         when(templateRoleRepository.findByTemplateIdOrderBySortOrder(template.getId())).thenReturn(List.of());
+        when(templateStageRepository.findByTemplateIdOrderBySortOrder(template.getId())).thenReturn(List.of());
         when(roomRepository.save(any(Room.class))).thenAnswer(invocation -> {
             Room room = invocation.getArgument(0);
             room.setId(UUID.randomUUID());
@@ -116,6 +126,7 @@ class RoomServiceSnapshotHygieneTest {
 
         verify(roomRepository, never()).save(any(Room.class));
         verify(roomRoleRepository, never()).saveAll(any());
+        verify(roomStageRepository, never()).saveAll(any());
     }
 
     @Test
@@ -127,6 +138,7 @@ class RoomServiceSnapshotHygieneTest {
         Template template = builtInTemplate("sales_call");
         when(templateRepository.findById(template.getId())).thenReturn(Optional.of(template));
         when(templateRoleRepository.findByTemplateIdOrderBySortOrder(template.getId())).thenReturn(List.of());
+        when(templateStageRepository.findByTemplateIdOrderBySortOrder(template.getId())).thenReturn(List.of());
         when(roomRepository.save(any(Room.class))).thenAnswer(invocation -> {
             Room room = invocation.getArgument(0);
             room.setId(UUID.randomUUID());
@@ -140,8 +152,12 @@ class RoomServiceSnapshotHygieneTest {
         return new RoomService(
                 roomRepository,
                 roomRoleRepository,
+                roomStageRepository,
+                roomStageRoleRepository,
                 templateRepository,
                 templateRoleRepository,
+                templateStageRepository,
+                templateStageRoleRepository,
                 userRepository);
     }
 
