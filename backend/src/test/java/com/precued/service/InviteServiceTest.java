@@ -24,6 +24,7 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -60,7 +61,10 @@ class InviteServiceTest {
         ParticipantRoleAssignment hostAssignment = new ParticipantRoleAssignment();
         hostAssignment.setRoomParticipant(host);
         hostAssignment.setRoomRole(hostRole);
-        when(assignmentRepository.findByRoomParticipantIdAndRevokedAtIsNull(host.getId()))
+        // Public resolve() intentionally needs no host context, so this common
+        // fixture is lenient for that one test while remaining active for all
+        // host-management operations.
+        lenient().when(assignmentRepository.findByRoomParticipantIdAndRevokedAtIsNull(host.getId()))
                 .thenReturn(Optional.of(hostAssignment));
     }
 
