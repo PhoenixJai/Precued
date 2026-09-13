@@ -99,6 +99,19 @@ export function describeSlideImageError(status: number): string {
   return `Unable to load slide (${status})`;
 }
 
+/**
+ * AuthService.verifyMagicLink's own messages are already clear for an
+ * expired or already-used link ("...has expired" / "...already been used");
+ * only the unknown-token case ("No magic link token <token>") leaks a raw
+ * token value that means nothing to the person reading it.
+ */
+export function describeMagicLinkVerifyError(message: string): string {
+  if (message.startsWith("No magic link token")) {
+    return "This sign-in link is invalid.";
+  }
+  return message;
+}
+
 async function fetchSlideImage(shareId: string, slideIndex: number): Promise<SlideImageResult> {
   const participant = getParticipant();
   const response = await fetch(`${API_BASE}/api/shares/${shareId}/slides/${slideIndex}/image`, {

@@ -1,7 +1,7 @@
-import { FormEvent, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
-import { AppShell } from "../components/AppShell";
-import { api } from "../lib/api";
+import { AppShell, Brand } from "../components/AppShell";
+import { api, describeMagicLinkVerifyError } from "../lib/api";
 import { saveAuthSession, saveParticipant } from "../lib/session";
 
 export default function AuthPage() {
@@ -12,7 +12,6 @@ export default function AuthPage() {
   const [email, setEmail] = useState("");
   const [guestName, setGuestName] = useState("");
   const [linkRequested, setLinkRequested] = useState(false);
-  const [magicToken, setMagicToken] = useState("");
   const [loading, setLoading] = useState(false);
   // lib/api.ts's request() redirects here (full navigation, not a client
   // route change) on any 401, appending this so the reason survives that
@@ -20,6 +19,33 @@ export default function AuthPage() {
   const [error, setError] = useState<string | null>(
     searchParams.get("sessionExpired") ? "Your session has expired. Please sign in again." : null,
   );
+
+  // AuthService emails a link to precued.auth.magic-link.base-url + "?token=...",
+  // which points back at this exact route — clicking it lands here with the
+  // token already in the URL, no manual copy/paste step.
+  const magicLinkToken = searchParams.get("token");
+  const [verifying, setVerifying] = useState(Boolean(magicLinkToken));
+
+  useEffect(() => {
+    if (!magicLinkToken) return;
+    let cancelled = false;
+    setVerifying(true);
+    setError(null);
+    api.verifyMagicLink(magicLinkToken)
+      .then((session) => {
+        if (cancelled) return;
+        saveAuthSession(session);
+        navigate("/templates", { replace: true });
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        const message = err instanceof Error ? err.message : "This sign-in link is invalid or has expired.";
+        setError(describeMagicLinkVerifyError(message));
+        setVerifying(false);
+      });
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [magicLinkToken]);
 
   const guestHelper = useMemo(
     () => isInviteRoute ? "Your invite is ready. Enter your name to join." : "Open a role-specific invite link to join as a guest.",
@@ -35,21 +61,6 @@ export default function AuthPage() {
       setLinkRequested(true);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to request magic link");
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  async function verifyAndContinue() {
-    if (!magicToken.trim()) return;
-    setLoading(true);
-    setError(null);
-    try {
-      const session = await api.verifyMagicLink(magicToken);
-      saveAuthSession(session);
-      navigate("/templates");
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Unable to verify magic link");
     } finally {
       setLoading(false);
     }
@@ -90,6 +101,21 @@ export default function AuthPage() {
     }
   }
 
+  if (verifying) {
+    return (
+      <AppShell>
+        <section className="page-center-narrow">
+          <div className="surface-card connecting-card">
+            <Brand />
+            <div className="spinner" aria-label="Signing in" />
+            <h1>Signing you in...</h1>
+            <p>Verifying your sign-in link.</p>
+          </div>
+        </section>
+      </AppShell>
+    );
+  }
+
   return (
     <AppShell>
       <section className="auth-page page-center-narrow">
@@ -99,31 +125,36 @@ export default function AuthPage() {
         </div>
 
         <div className="auth-stack">
-          <form className="surface-card auth-card" onSubmit={requestMagicLink}>
-            <div className="card-heading-row">
-              <div className="icon-tile">✉</div>
-              <div>
-                <h2>Request a magic link</h2>
-                <p>We’ll email you a secure link to join your session.</p>
+          {linkRequested ? (
+            <div className="surface-card auth-card check-email-card">
+              <div className="card-heading-row">
+                <div className="icon-tile">✉</div>
+                <div>
+                  <h2>Check your email</h2>
+                  <p>We sent a sign-in link to {email}. Click it to continue — this page picks it up automatically.</p>
+                </div>
               </div>
+              <button type="button" className="text-button" onClick={() => setLinkRequested(false)}>
+                Use a different email
+              </button>
             </div>
-            <label>
-              Work email
-              <input type="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="you@company.com" required />
-            </label>
-            <button className="primary-button wide" disabled={loading}>{loading ? "Working..." : "Email me a magic link  →"}</button>
-            <small>For session hosts.</small>
-            {linkRequested && (
-              <div className="demo-token-box">
-                <strong>Check your email for the magic link</strong>
-                <label>
-                  Paste the token from the link
-                  <input value={magicToken} onChange={(event) => setMagicToken(event.target.value)} placeholder="Magic link token" />
-                </label>
-                <button type="button" className="secondary-button" onClick={verifyAndContinue} disabled={loading || !magicToken.trim()}>Verify & continue</button>
+          ) : (
+            <form className="surface-card auth-card" onSubmit={requestMagicLink}>
+              <div className="card-heading-row">
+                <div className="icon-tile">✉</div>
+                <div>
+                  <h2>Request a magic link</h2>
+                  <p>We’ll email you a secure link to join your session.</p>
+                </div>
               </div>
-            )}
-          </form>
+              <label>
+                Work email
+                <input type="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="you@company.com" required />
+              </label>
+              <button className="primary-button wide" disabled={loading}>{loading ? "Working..." : "Email me a magic link  →"}</button>
+              <small>For session hosts.</small>
+            </form>
+          )}
 
           <div className="or-divider"><span />or<span /></div>
 
