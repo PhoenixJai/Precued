@@ -85,6 +85,9 @@ export function SessionFlowCallDock({ roomId }: { roomId: string }) {
   }
 
   if (!me || me.roomId !== roomId) return null;
+  if (!error && (!flow || !flow.enabled || flow.status === "DISABLED" || flow.status === "NOT_CONFIGURED")) {
+    return null;
+  }
 
   return (
     <div className="session-flow-dock">
