@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { customTemplateLaunchCards, hasHostRole, roomTemplateTitle } from "./customTemplateLaunch";
+import { rememberTemplateName, templateName } from "./templates";
 import type { TemplateRoleDefinition, TemplateSummary } from "../types/precued";
 
 const customTemplate: TemplateSummary = {
@@ -41,6 +42,11 @@ describe("custom template launch parity", () => {
 
   it("uses the room's server-provided template name for custom rooms", () => {
     expect(roomTemplateTitle(customTemplate.id, "Negotiation Lab")).toBe("Negotiation Lab");
+  });
+
+  it("remembers the server-provided custom name for later call-page lookups", () => {
+    rememberTemplateName(customTemplate.id, customTemplate.name);
+    expect(templateName(customTemplate.id)).toBe("Negotiation Lab");
   });
 
   it("keeps the built-in name fallback for older/built-in room payloads", () => {
