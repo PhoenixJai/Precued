@@ -7,6 +7,7 @@ function role(overrides: Partial<RoomRole> & { id: string; roleKey: string }): R
     roomId: "room-1",
     name: overrides.roleKey,
     isHostRole: false,
+    isGuestRole: false,
     maxMembers: null,
     ...overrides,
   };
@@ -59,6 +60,17 @@ describe("buildRoleSetupRows", () => {
 
     expect(rows).toHaveLength(4);
     expect(rows.map((r) => r.role.roleKey)).toEqual(["judge", "jury", "defense", "prosecution"]);
+  });
+
+  it("preserves the runtime guest-role snapshot on each row", () => {
+    const rows = buildRoleSetupRows(
+      [role({ id: "r-observer", roleKey: "observer", isGuestRole: true })],
+      [],
+      roomId,
+      origin,
+    );
+
+    expect(rows[0].role.isGuestRole).toBe(true);
   });
 
   it("gives the host role no invite link, and every other role an invite link", () => {

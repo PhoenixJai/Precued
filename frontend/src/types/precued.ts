@@ -38,6 +38,7 @@ export interface RoomRole {
   roleKey: string;
   name: string;
   isHostRole: boolean;
+  isGuestRole: boolean;
   maxMembers: number | null;
 }
 

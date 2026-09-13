@@ -10,6 +10,7 @@ public record RoomRoleResponse(
         String roleKey,
         String name,
         boolean isHostRole,
+        boolean isGuestRole,
         Integer maxMembers) {
 
     public static RoomRoleResponse from(RoomRole role) {
@@ -19,6 +20,7 @@ public record RoomRoleResponse(
                 role.getRoleKey(),
                 role.getName(),
                 role.isHostRole(),
+                role.isGuestRole(),
                 role.getMaxMembers());
     }
 }

@@ -230,17 +230,19 @@ class RoomControllerTest {
         RoomRole role = new RoomRole();
         role.setId(UUID.randomUUID());
         role.setRoom(room);
-        role.setRoleKey("host");
-        role.setName("Host");
-        role.setHostRole(true);
+        role.setRoleKey("guest_observer");
+        role.setName("Guest Observer");
+        role.setHostRole(false);
+        role.setGuestRole(true);
         when(roomService.listRoles(roomId)).thenReturn(List.of(role));
 
         mockMvc.perform(get("/api/rooms/{roomId}/room-roles", roomId))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[0].id").value(role.getId().toString()))
                 .andExpect(jsonPath("$[0].roomId").value(roomId.toString()))
-                .andExpect(jsonPath("$[0].roleKey").value("host"))
-                .andExpect(jsonPath("$[0].isHostRole").value(true));
+                .andExpect(jsonPath("$[0].roleKey").value("guest_observer"))
+                .andExpect(jsonPath("$[0].isHostRole").value(false))
+                .andExpect(jsonPath("$[0].isGuestRole").value(true));
     }
 
     @Test

@@ -56,6 +56,12 @@ public class RoomService {
      * this method's own transaction rather than reused directly, matching
      * how this codebase always re-fetches across a transaction boundary
      * instead of trusting a possibly-detached entity's non-ID fields.
+     *
+     * Built-in Templates (createdBy == null) remain launchable by any
+     * authenticated account holder. Custom Templates are private-by-default
+     * and may only be launched by their creator, matching TemplateService's
+     * visibility contract. A non-owner gets the same not-found response as
+     * an unknown template so the private template's existence is not leaked.
      */
     @Transactional
     public Room create(String templateId, Room.HostDisconnectPolicy hostDisconnectPolicy) {
@@ -65,6 +71,11 @@ public class RoomService {
         User createdBy = userRepository.findById(createdByUserId)
                 .orElseThrow(() -> new IllegalStateException(
                         "Authenticated User " + createdByUserId + " no longer exists"));
+
+        if (template.getCreatedBy() != null
+                && !template.getCreatedBy().getId().equals(createdBy.getId())) {
+            throw new IllegalArgumentException("No Template with id " + templateId);
+        }
 
         Room room = new Room();
         room.setTemplate(template);
@@ -92,6 +103,7 @@ public class RoomService {
         roomRole.setRoleKey(templateRole.getRoleKey());
         roomRole.setName(templateRole.getName());
         roomRole.setHostRole(templateRole.isHostRole());
+        roomRole.setGuestRole(templateRole.isGuestRole());
         roomRole.setMaxMembers(templateRole.getMaxMembers());
         return roomRole;
     }
