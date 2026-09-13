@@ -50,14 +50,15 @@ export default function TemplatePickerPage() {
   useEffect(() => {
     const auth = getAuthSession();
     if (!auth) return;
+    const authToken = auth.sessionToken;
     let cancelled = false;
 
     async function loadCustomTemplates() {
       try {
-        const summaries = await api.listMyTemplates(auth.sessionToken);
+        const summaries = await api.listMyTemplates(authToken);
         const cards = customTemplateLaunchCards(summaries);
         const roleEntries = await Promise.all(
-          cards.map(async (card) => [card.id, await api.getTemplateRoles(card.id, auth.sessionToken)] as const),
+          cards.map(async (card) => [card.id, await api.getTemplateRoles(card.id, authToken)] as const),
         );
         if (cancelled) return;
         setCustomTemplates(cards);
@@ -85,9 +86,6 @@ export default function TemplatePickerPage() {
     setCreatingTemplateId(templateId);
     setError(null);
     try {
-      // Custom templates are user-authored and can legitimately be unfinished.
-      // Check for a host before creating the Room so a half-built template does
-      // not leave behind an orphan Room that nobody can host.
       if (isCustom) {
         const sourceRoles = await api.getTemplateRoles(templateId, auth.sessionToken);
         if (!hasHostRole(sourceRoles)) {
@@ -103,9 +101,6 @@ export default function TemplatePickerPage() {
       }
 
       const participant = await api.joinRoom(room.id, auth.displayName, auth.userId, auth.sessionToken);
-      // Save before assignRole: that call requires the session this join
-      // just issued (ParticipantSessionInterceptor, backend), read from
-      // storage on every request via lib/api.ts's request().
       saveParticipant({
         id: participant.id,
         roomId: room.id,
