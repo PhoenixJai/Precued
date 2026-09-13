@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { useState } from "react";
 import { Link, useMatch, useNavigate } from "react-router-dom";
+import { navigateToProfile } from "../lib/accountMenuNavigation";
 import { initials } from "../lib/initials";
 import { clearSession, getAuthSession } from "../lib/session";
 import { SessionFlowCallDock } from "./SessionFlowCallDock";
@@ -46,7 +47,12 @@ export function AppShell({ children, showTaglines = true }: { children: ReactNod
               </button>
               {menuOpen && (
                 <div className="account-menu">
-                  <Link to="/profile" onClick={() => setMenuOpen(false)}>Profile</Link>
+                  <button
+                    type="button"
+                    onClick={() => navigateToProfile(navigate, () => setMenuOpen(false))}
+                  >
+                    Profile
+                  </button>
                   <button type="button" onClick={logOut}>Log out</button>
                 </div>
               )}
