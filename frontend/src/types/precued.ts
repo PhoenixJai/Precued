@@ -31,7 +31,10 @@ export interface SessionResponse {
 
 export interface Room {
   id: string;
-  templateId: TemplateId;
+  /** Built-in ids are TemplateId literals; user-created template ids are generated strings. */
+  templateId: string;
+  /** Readable server-provided name so custom Room snapshots never have to display a UUID as their title. */
+  templateName: string;
   createdByUserId: string;
   livekitRoomName: string;
   status: RoomStatus;
@@ -103,13 +106,7 @@ export interface SessionFlow {
   stages: SessionFlowStage[];
 }
 
-/**
- * A built-in template (isCustom false) or a user-created one
- * (M-Templates). A custom template's id is a generated string, not one of
- * TemplateId's three literals — deliberately typed as plain string here
- * rather than widening TemplateId, since using a custom template to
- * actually create a Room is a separate, not-yet-built follow-up.
- */
+/** A built-in template (isCustom false) or an Account Holder's private custom template. */
 export interface TemplateSummary {
   id: string;
   name: string;
@@ -130,7 +127,7 @@ export interface TemplateRoleDefinition {
 
 export interface TemplatePreset {
   id: string;
-  templateId: TemplateId;
+  templateId: string;
   name: string;
   sortOrder: number;
   roleKeys: string[];
