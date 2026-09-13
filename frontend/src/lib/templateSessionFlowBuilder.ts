@@ -6,6 +6,21 @@ export interface TemplateFlowStageDraft {
   templateRoleIds: string[];
 }
 
+export function cloneStageDraft(stage: TemplateFlowStageDraft): TemplateFlowStageDraft {
+  return {
+    ...stage,
+    templateRoleIds: [...stage.templateRoleIds],
+  };
+}
+
+export function restoreStageDraft(
+  stages: TemplateFlowStageDraft[],
+  index: number,
+  original: TemplateFlowStageDraft,
+): TemplateFlowStageDraft[] {
+  return stages.map((stage, stageIndex) => stageIndex === index ? cloneStageDraft(original) : stage);
+}
+
 export function nextStageKey(name: string, existingKeys: string[]): string {
   const normalized = name
     .trim()
