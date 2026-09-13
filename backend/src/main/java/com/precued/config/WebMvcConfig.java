@@ -61,12 +61,15 @@ public class WebMvcConfig implements WebMvcConfigurer {
 
     // Bearer tokens are sent in an Authorization header, never a cookie, so
     // this deliberately doesn't allowCredentials — nothing here needs it.
+    // Keep this list aligned with the HTTP methods actually exposed by the
+    // controllers: browser preflight blocks a cross-origin write before the
+    // controller is reached when its method is missing here.
     @Override
     public void addCorsMappings(CorsRegistry registry) {
         if (allowedOrigin.isBlank()) return;
         registry.addMapping("/api/**")
                 .allowedOrigins(allowedOrigin)
-                .allowedMethods("GET", "POST")
+                .allowedMethods("GET", "POST", "PUT", "DELETE")
                 .allowedHeaders("Authorization", "Content-Type");
     }
 }
