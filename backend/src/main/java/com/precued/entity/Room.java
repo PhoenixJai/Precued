@@ -59,5 +59,6 @@ public class Room {
     private Instant endedAt;
 
     public enum Status { CREATED, ACTIVE, ENDED }
+
     public enum HostDisconnectPolicy { END_CALL, PERSIST_INDEFINITELY, PERSIST_FOR_DURATION }
 }
