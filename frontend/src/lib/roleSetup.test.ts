@@ -77,7 +77,7 @@ describe("buildRoleSetupRows", () => {
     expect(rows[0]).not.toHaveProperty("inviteUrl");
   });
 
-  it("lists every joined participant for an unlimited-membership role, not just one", () => {
+  it("lists every present participant for an unlimited-membership role, not just one", () => {
     const roles = [role({ id: "r-jury", roleKey: "jury", maxMembers: null })];
     const jurorA = participant({ id: "p-a", activeRoomRoleId: "r-jury" });
     const jurorB = participant({ id: "p-b", activeRoomRoleId: "r-jury" });
@@ -86,22 +86,25 @@ describe("buildRoleSetupRows", () => {
     const rows = buildRoleSetupRows(roles, [jurorA, jurorB, otherRoleParticipant]);
 
     expect(rows[0].joinedParticipants.map((p) => p.id)).toEqual(["p-a", "p-b"]);
+    expect(rows[0].assignedParticipants.map((p) => p.id)).toEqual(["p-a", "p-b"]);
   });
 
-  it("excludes participants who have left", () => {
+  it("keeps a disconnected member assigned for capacity while excluding them from presence", () => {
     const roles = [role({ id: "r-jury", roleKey: "jury" })];
     const departed = participant({ id: "p-a", activeRoomRoleId: "r-jury", leftAt: "2026-01-01T00:05:00Z" });
 
     const rows = buildRoleSetupRows(roles, [departed]);
 
     expect(rows[0].joinedParticipants).toEqual([]);
+    expect(rows[0].assignedParticipants.map((p) => p.id)).toEqual(["p-a"]);
   });
 
-  it("returns an empty joinedParticipants list for a role nobody has joined yet", () => {
+  it("returns empty membership lists for a role nobody has joined yet", () => {
     const roles = [role({ id: "r-defense", roleKey: "defense" })];
 
     const rows = buildRoleSetupRows(roles, []);
 
     expect(rows[0].joinedParticipants).toEqual([]);
+    expect(rows[0].assignedParticipants).toEqual([]);
   });
 });
