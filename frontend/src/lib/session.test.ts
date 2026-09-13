@@ -39,7 +39,7 @@ describe("clearSession", () => {
     // lib/api.ts's request(), which calls this on every 401 response.
     // Leaving any one behind risks a stale sessionToken getting sent again
     // right after the app redirects to sign-in.
-    saveAuthSession({ sessionToken: "auth-tok", userId: "u1", email: "host@example.com", expiresAt: "2099-01-01T00:00:00Z" });
+    saveAuthSession({ sessionToken: "auth-tok", userId: "u1", email: "host@example.com", displayName: "Host", expiresAt: "2099-01-01T00:00:00Z" });
     saveParticipant({
       id: "p1",
       roomId: "r1",

@@ -18,6 +18,7 @@ export interface SessionResponse {
   sessionToken: string;
   userId: string;
   email: string;
+  displayName: string;
   expiresAt: string;
 }
 

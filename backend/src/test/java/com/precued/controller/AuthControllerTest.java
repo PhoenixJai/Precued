@@ -73,6 +73,7 @@ class AuthControllerTest {
         User user = new User();
         user.setId(UUID.randomUUID());
         user.setEmail("host@example.com");
+        user.setDisplayName("host");
 
         AuthSession session = new AuthSession();
         session.setUser(user);
@@ -86,7 +87,8 @@ class AuthControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.sessionToken").value("session-token-value"))
                 .andExpect(jsonPath("$.userId").value(user.getId().toString()))
-                .andExpect(jsonPath("$.email").value("host@example.com"));
+                .andExpect(jsonPath("$.email").value("host@example.com"))
+                .andExpect(jsonPath("$.displayName").value("host"));
     }
 
     @Test
@@ -106,6 +108,7 @@ class AuthControllerTest {
         User user = new User();
         user.setId(UUID.randomUUID());
         user.setEmail("host@example.com");
+        user.setDisplayName("Alex Host");
 
         AuthSession session = new AuthSession();
         session.setUser(user);
@@ -120,7 +123,8 @@ class AuthControllerTest {
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.sessionToken").value("session-token-value"))
                 .andExpect(jsonPath("$.userId").value(user.getId().toString()))
-                .andExpect(jsonPath("$.email").value("host@example.com"));
+                .andExpect(jsonPath("$.email").value("host@example.com"))
+                .andExpect(jsonPath("$.displayName").value("Alex Host"));
     }
 
     @Test
@@ -147,6 +151,7 @@ class AuthControllerTest {
         User user = new User();
         user.setId(UUID.randomUUID());
         user.setEmail("host@example.com");
+        user.setDisplayName("Alex Host");
 
         AuthSession session = new AuthSession();
         session.setUser(user);
