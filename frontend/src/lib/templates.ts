@@ -1,13 +1,8 @@
 import type { TemplateId } from "../types/precued";
 
-/**
- * TemplateId is a closed union (3 seeded templates — see
- * V2__seed_templates.sql), so a client-side name lookup is safe here: it's
- * not user data, it's the same fixed set already listed in
- * TemplatePickerPage's template cards. No backend endpoint exposes
- * Template.name today; add one instead of extending this if a 4th
- * template is ever added dynamically rather than via a new migration.
- */
+/** Fixed labels for the three Precued-owned built-ins. Custom templates use
+ * server-provided names on Room responses; unknown ids fall back to a human
+ * label rather than leaking a generated UUID into the UI. */
 export const TEMPLATE_NAMES: Record<TemplateId, string> = {
   sales_call: "Sales Call",
   mock_trial: "Mock Trial",
@@ -15,5 +10,5 @@ export const TEMPLATE_NAMES: Record<TemplateId, string> = {
 };
 
 export function templateName(templateId: string): string {
-  return (TEMPLATE_NAMES as Record<string, string>)[templateId] ?? templateId;
+  return (TEMPLATE_NAMES as Record<string, string>)[templateId] ?? "Custom Template";
 }
