@@ -70,8 +70,10 @@ public class AuthController {
 
     @PostMapping("/signup")
     @ResponseStatus(HttpStatus.CREATED)
-    public SessionResponse signUp(@Valid @RequestBody SignUpRequest request) {
-        rateLimiter.checkSignUp(request.email());
+    public SessionResponse signUp(
+            @Valid @RequestBody SignUpRequest request,
+            HttpServletRequest httpRequest) {
+        rateLimiter.checkSignUp(httpRequest.getRemoteAddr());
         AuthSession session = accountService.signUp(request.email(), request.password(), request.displayName());
         return toSessionResponse(session);
     }
