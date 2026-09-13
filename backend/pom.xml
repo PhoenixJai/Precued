@@ -72,12 +72,6 @@
             <artifactId>flyway-database-postgresql</artifactId>
         </dependency>
 
-        <!-- Mail for magic-link auth -->
-        <dependency>
-            <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter-mail</artifactId>
-        </dependency>
-
         <!-- M-Auth: session enforcement on write endpoints (Precued_Issues_Update_3.md).
              Replaces ad hoc 401 handling in the interceptors with the standard
              framework's filter chain + authorizeHttpRequests. -->

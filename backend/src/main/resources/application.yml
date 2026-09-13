@@ -28,18 +28,6 @@ spring:
       max-file-size: 50MB
       max-request-size: 50MB
 
-  mail:
-    host: ${SMTP_HOST:}
-    port: ${SMTP_PORT:587}
-    username: ${SMTP_USER:}
-    password: ${SMTP_PASSWORD:}
-    properties:
-      mail:
-        smtp:
-          auth: true
-          starttls:
-            enable: true
-
 server:
   port: ${PORT:8080}
 
@@ -59,11 +47,12 @@ precued:
     magic-link:
       base-url: ${APP_BASE_URL:http://localhost:5173}
       token-ttl-minutes: 15
-      # Resend's SMTP relay uses the literal username "resend" and an API
-      # key as the password — see .env.example. onboarding@resend.dev works
-      # unverified for testing (delivers only to the account owner's own
-      # address); switch to a verified sending domain's address for real use.
+      # Resend's HTTP API (not their SMTP relay — Railway blocks outbound
+      # port 587). onboarding@resend.dev works unverified for testing
+      # (delivers only to the account owner's own address); switch to a
+      # verified sending domain's address for real use.
       from-address: ${MAIL_FROM_ADDRESS:onboarding@resend.dev}
+      resend-api-key: ${RESEND_API_KEY:}
   invite:
     default-ttl-days: 7 # used when Invite.expires_at is not explicitly set and room hasn't ended
   storage:

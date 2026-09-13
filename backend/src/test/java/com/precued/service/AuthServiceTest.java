@@ -12,8 +12,6 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.mail.SimpleMailMessage;
-import org.springframework.mail.javamail.JavaMailSender;
 
 import java.time.Instant;
 import java.util.Optional;
@@ -22,6 +20,8 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.contains;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -39,7 +39,7 @@ class AuthServiceTest {
     @Mock private MagicLinkTokenRepository magicLinkTokenRepository;
     @Mock private AuthSessionRepository authSessionRepository;
     @Mock private UserRepository userRepository;
-    @Mock private JavaMailSender mailSender;
+    @Mock private ResendEmailClient resendEmailClient;
 
     private AuthService authService;
 
@@ -49,26 +49,9 @@ class AuthServiceTest {
                 magicLinkTokenRepository,
                 authSessionRepository,
                 userRepository,
-                mailSender,
+                resendEmailClient,
                 "http://localhost:5173",
-                "Precued <noreply@example.com>",
-                "smtp.resend.com",
-                "resend",
-                "a-real-api-key");
-    }
-
-    @Test
-    void blankSmtpCredentialNames_reportsOnlyTheBlankOnes() {
-        // Live incident: SMTP_PASSWORD reached JavaMailSenderImpl blank
-        // despite being confirmed set in Railway, tracked down only by
-        // reading a raw stack trace. This surfaces the same condition at
-        // boot instead, without ever logging a credential's actual value.
-        assertThat(AuthService.blankSmtpCredentialNames("", "", ""))
-                .containsExactly("SMTP_HOST", "SMTP_USER", "SMTP_PASSWORD");
-        assertThat(AuthService.blankSmtpCredentialNames("smtp.resend.com", "resend", ""))
-                .containsExactly("SMTP_PASSWORD");
-        assertThat(AuthService.blankSmtpCredentialNames("smtp.resend.com", "resend", "key"))
-                .isEmpty();
+                "Precued <noreply@example.com>");
     }
 
     @Test
@@ -96,12 +79,11 @@ class AuthServiceTest {
 
         MagicLinkToken result = authService.generateMagicLink("host@example.com");
 
-        ArgumentCaptor<SimpleMailMessage> messageCaptor = ArgumentCaptor.forClass(SimpleMailMessage.class);
-        verify(mailSender).send(messageCaptor.capture());
-        SimpleMailMessage sent = messageCaptor.getValue();
-        assertThat(sent.getTo()).containsExactly("host@example.com");
-        assertThat(sent.getFrom()).isEqualTo("Precued <noreply@example.com>");
-        assertThat(sent.getText()).contains("http://localhost:5173?token=" + result.getToken());
+        verify(resendEmailClient).send(
+                eq("Precued <noreply@example.com>"),
+                eq("host@example.com"),
+                eq("Sign in to Precued"),
+                contains("http://localhost:5173?token=" + result.getToken()));
     }
 
     @Test

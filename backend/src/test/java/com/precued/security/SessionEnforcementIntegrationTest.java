@@ -8,13 +8,13 @@ import com.precued.repository.RoomParticipantRepository;
 import com.precued.repository.RoomRepository;
 import com.precued.repository.TemplateRepository;
 import com.precued.repository.UserRepository;
+import com.precued.service.ResendEmailClient;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.http.MediaType;
-import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
 
@@ -49,12 +49,11 @@ class SessionEnforcementIntegrationTest {
     @Autowired private RoomRepository roomRepository;
     @Autowired private RoomParticipantRepository roomParticipantRepository;
 
-    // Real JavaMailSenderImpl would try to actually connect (blank SMTP_HOST
-    // in this profile) once the request reaches AuthService — mocked purely
-    // so magicLink_noSessionHeader_isPublicNotAuthenticated can assert on
-    // the real HTTP status this endpoint returns, not an unrelated mail
-    // connection failure.
-    @MockBean private JavaMailSender mailSender;
+    // Real ResendEmailClient would try to actually POST to api.resend.com
+    // once the request reaches AuthService — mocked purely so
+    // magicLink_noSessionHeader_isPublicNotAuthenticated can assert on the
+    // real HTTP status this endpoint returns, not an unrelated network call.
+    @MockBean private ResendEmailClient resendEmailClient;
 
     @Test
     void magicLink_noSessionHeader_isPublicNotAuthenticated() throws Exception {

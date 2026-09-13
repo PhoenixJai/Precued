@@ -10,14 +10,10 @@ import com.precued.util.OpaqueTokenGenerator;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.mail.SimpleMailMessage;
-import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.stereotype.Service;
 
 import java.time.Duration;
 import java.time.Instant;
-import java.util.ArrayList;
-import java.util.List;
 
 /**
  * Hybrid auth per Issue #1's resolution: magic link required for host-role
@@ -25,9 +21,10 @@ import java.util.List;
  * everyone else.
  *
  * Deliberately two separate steps: {@link #generateMagicLink} creates,
- * stores, and emails the token via {@link JavaMailSender} (Resend's SMTP
- * relay in production — see .env.example). {@link #verifyMagicLink} is the
- * only place a User gets created or a token gets consumed, and never skips
+ * stores, and emails the token via {@link ResendEmailClient} (Resend's HTTP
+ * API — see .env.example; Railway blocks outbound SMTP, so the API is used
+ * instead of Resend's SMTP relay). {@link #verifyMagicLink} is the only
+ * place a User gets created or a token gets consumed, and never skips
  * validation regardless of how it's called.
  *
  * Session tokens are opaque, DB-backed, random strings (same pattern as
@@ -51,7 +48,7 @@ public class AuthService {
     private final MagicLinkTokenRepository magicLinkTokenRepository;
     private final AuthSessionRepository authSessionRepository;
     private final UserRepository userRepository;
-    private final JavaMailSender mailSender;
+    private final ResendEmailClient resendEmailClient;
     private final String magicLinkBaseUrl;
     private final String fromAddress;
 
@@ -59,38 +56,15 @@ public class AuthService {
             MagicLinkTokenRepository magicLinkTokenRepository,
             AuthSessionRepository authSessionRepository,
             UserRepository userRepository,
-            JavaMailSender mailSender,
+            ResendEmailClient resendEmailClient,
             @Value("${precued.auth.magic-link.base-url}") String magicLinkBaseUrl,
-            @Value("${precued.auth.magic-link.from-address}") String fromAddress,
-            @Value("${spring.mail.host:}") String smtpHost,
-            @Value("${spring.mail.username:}") String smtpUsername,
-            @Value("${spring.mail.password:}") String smtpPassword) {
+            @Value("${precued.auth.magic-link.from-address}") String fromAddress) {
         this.magicLinkTokenRepository = magicLinkTokenRepository;
         this.authSessionRepository = authSessionRepository;
         this.userRepository = userRepository;
-        this.mailSender = mailSender;
+        this.resendEmailClient = resendEmailClient;
         this.magicLinkBaseUrl = magicLinkBaseUrl;
         this.fromAddress = fromAddress;
-
-        // Live incident: SMTP_PASSWORD reached JavaMailSenderImpl blank in
-        // production despite being confirmed set in Railway — found only by
-        // reading a raw jakarta.mail.AuthenticationFailedException stack
-        // trace from an actual failed send. This surfaces the same
-        // condition at boot instead, so a misconfigured/misscoped Railway
-        // variable shows up in the startup log immediately, not on the
-        // first user-facing failure. Never logs a credential's actual value.
-        List<String> blank = blankSmtpCredentialNames(smtpHost, smtpUsername, smtpPassword);
-        if (!blank.isEmpty()) {
-            log.warn("Blank at startup, magic-link emails will fail to send: {}", blank);
-        }
-    }
-
-    static List<String> blankSmtpCredentialNames(String host, String username, String password) {
-        List<String> blank = new ArrayList<>();
-        if (host.isBlank()) blank.add("SMTP_HOST");
-        if (username.isBlank()) blank.add("SMTP_USER");
-        if (password.isBlank()) blank.add("SMTP_PASSWORD");
-        return blank;
     }
 
     /**
@@ -110,15 +84,14 @@ public class AuthService {
         magicLink.setExpiresAt(Instant.now().plus(MAGIC_LINK_TTL));
         MagicLinkToken saved = magicLinkTokenRepository.save(magicLink);
 
-        SimpleMailMessage message = new SimpleMailMessage();
-        message.setFrom(fromAddress);
-        message.setTo(email);
-        message.setSubject("Sign in to Precued");
-        message.setText("Click the link below to sign in to Precued:\n\n"
-                + magicLinkBaseUrl + "?token=" + saved.getToken()
-                + "\n\nThis link expires in 15 minutes and can only be used once. If you didn't"
-                + " request this, you can safely ignore this email.");
-        mailSender.send(message);
+        resendEmailClient.send(
+                fromAddress,
+                email,
+                "Sign in to Precued",
+                "Click the link below to sign in to Precued:\n\n"
+                        + magicLinkBaseUrl + "?token=" + saved.getToken()
+                        + "\n\nThis link expires in 15 minutes and can only be used once. If you didn't"
+                        + " request this, you can safely ignore this email.");
 
         log.info("Magic link email sent to {}", email);
 
