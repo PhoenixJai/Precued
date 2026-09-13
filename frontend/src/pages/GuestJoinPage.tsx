@@ -1,59 +1,77 @@
-import { FormEvent, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { AppShell } from "../components/AppShell";
 import { api } from "../lib/api";
 import { saveParticipant } from "../lib/session";
+import type { InvitePreview } from "../types/precued";
 
-/**
- * Auth & Account Overhaul (supersedes Issue 1's hybrid magic-link decision
- * for hosts): this used to be the combined "/" sign-in page — magic-link
- * request/verify for hosts, guest join below it. Hosts now get real
- * accounts (LoginPage/SignupPage); this page shrinks to exactly what a
- * guest hits via a room invite link, and lives at /join/:roomId/:roomRoleId
- * instead of "/". The invite-link shape (roomId + roomRoleId, not a real
- * Invite token) is unchanged here — that's a separate, later rework.
- */
+/** Guest entry is now backed by an opaque Invite token, not a client-chosen RoomRole id. */
 export default function GuestJoinPage() {
   const navigate = useNavigate();
-  const { roomId, roomRoleId } = useParams();
-  const isInviteRoute = Boolean(roomId && roomRoleId);
+  const { inviteToken } = useParams();
   const [guestName, setGuestName] = useState("");
+  const [preview, setPreview] = useState<InvitePreview | null>(null);
+  const [resolving, setResolving] = useState(Boolean(inviteToken));
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const guestHelper = useMemo(
-    () => isInviteRoute ? "Your invite is ready. Enter your name to join." : "Open a role-specific invite link to join as a guest.",
-    [isInviteRoute],
-  );
+  useEffect(() => {
+    if (!inviteToken) {
+      setResolving(false);
+      return;
+    }
+    let cancelled = false;
+    setResolving(true);
+    setError(null);
+    api.getInvitePreview(inviteToken)
+      .then((nextPreview) => {
+        if (!cancelled) setPreview(nextPreview);
+      })
+      .catch((err) => {
+        if (!cancelled) setError(err instanceof Error ? err.message : "Unable to resolve invite");
+      })
+      .finally(() => {
+        if (!cancelled) setResolving(false);
+      });
+    return () => { cancelled = true; };
+  }, [inviteToken]);
+
+  const guestHelper = useMemo(() => {
+    if (!inviteToken) return "Open an invitation link created by the room host to join as a guest.";
+    if (resolving) return "Checking your invitation…";
+    if (preview) return `You are joining as ${preview.roleName}.`;
+    return "This invitation could not be used.";
+  }, [inviteToken, preview, resolving]);
 
   async function joinGuest(event: FormEvent) {
     event.preventDefault();
-    if (!roomId || !roomRoleId) return;
+    if (!inviteToken || !preview) return;
     setLoading(true);
     setError(null);
     try {
-      const roles = await api.getRoomRoles(roomId);
-      const role = roles.find((item) => item.id === roomRoleId);
-      if (!role || role.isHostRole) {
-        throw new Error("This invite link does not resolve to a guest role.");
-      }
-      const participant = await api.joinRoom(roomId, guestName.trim(), null);
-      // Save before assignRole: that call requires the session this join
-      // just issued (ParticipantSessionInterceptor, backend), read from
-      // storage on every request via lib/api.ts's request().
+      const participant = await api.joinRoom(
+        preview.roomId,
+        guestName.trim(),
+        null,
+        undefined,
+        inviteToken,
+      );
+
+      // InviteJoinService already created the ParticipantRoleAssignment in
+      // the same transaction that consumed the Invite — no client-side
+      // self-assignment step remains.
       saveParticipant({
         id: participant.id,
-        roomId,
-        roomRoleId: role.id,
-        roleKey: role.roleKey,
-        roleName: role.name,
+        roomId: preview.roomId,
+        roomRoleId: preview.roomRoleId,
+        roleKey: preview.roomRoleId,
+        roleName: preview.roleName,
         isHost: false,
         displayName: participant.displayName,
         userId: null,
         sessionToken: participant.sessionToken,
       });
-      await api.assignRole(participant.id, role.id);
-      navigate(`/rooms/${roomId}/call`);
+      navigate(`/rooms/${preview.roomId}/call`);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to join room");
     } finally {
@@ -66,7 +84,7 @@ export default function GuestJoinPage() {
       <section className="auth-page page-center-narrow">
         <div className="page-heading centered">
           <h1>Join a Precued session</h1>
-          <p>Enter your name to join as a guest.</p>
+          <p>{preview ? `You've been invited as ${preview.roleName}.` : "Enter your name to join as a guest."}</p>
         </div>
 
         <div className="auth-stack">
@@ -75,14 +93,25 @@ export default function GuestJoinPage() {
               <div className="icon-tile">♙</div>
               <div>
                 <h2>Join as guest</h2>
-                <p>Enter your name and join with an invite link.</p>
+                <p>{preview ? `Role: ${preview.roleName}` : "Use a valid invitation link from the room host."}</p>
               </div>
             </div>
             <label>
               Your name
-              <input value={guestName} onChange={(event) => setGuestName(event.target.value)} placeholder="Alex Chen" required />
+              <input
+                value={guestName}
+                onChange={(event) => setGuestName(event.target.value)}
+                placeholder="Alex Chen"
+                disabled={!preview || resolving || loading}
+                required
+              />
             </label>
-            <button className="primary-button wide" disabled={!isInviteRoute || loading}>{loading ? "Joining..." : "Join with invite link  →"}</button>
+            <button
+              className="primary-button wide"
+              disabled={!preview || !guestName.trim() || resolving || loading}
+            >
+              {loading ? "Joining..." : "Join session  →"}
+            </button>
             <small>{guestHelper}</small>
           </form>
           {error && <div className="error-banner">{error}</div>}
