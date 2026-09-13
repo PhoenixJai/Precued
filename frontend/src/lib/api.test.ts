@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { api, describeSlideImageError } from "./api";
+import { api, describeMagicLinkVerifyError, describeSlideImageError } from "./api";
 
 function createFakeStorage(): Storage {
   let store: Record<string, string> = {};
@@ -70,5 +70,23 @@ describe("describeSlideImageError", () => {
   it("falls back to a generic message carrying the status for anything else", () => {
     expect(describeSlideImageError(500)).toBe("Unable to load slide (500)");
     expect(describeSlideImageError(502)).toBe("Unable to load slide (502)");
+  });
+});
+
+describe("describeMagicLinkVerifyError", () => {
+  it("replaces the unknown-token backend message, which leaks the raw token, with a clean one", () => {
+    // AuthService.verifyMagicLink: "No magic link token " + token
+    expect(describeMagicLinkVerifyError("No magic link token abc123xyz")).toBe(
+      "This sign-in link is invalid.",
+    );
+  });
+
+  it("passes the expired/already-used messages through unchanged — already clear on their own", () => {
+    expect(describeMagicLinkVerifyError("Magic link token has expired")).toBe(
+      "Magic link token has expired",
+    );
+    expect(describeMagicLinkVerifyError("Magic link token has already been used")).toBe(
+      "Magic link token has already been used",
+    );
   });
 });
