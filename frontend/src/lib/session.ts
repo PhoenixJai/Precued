@@ -4,6 +4,18 @@ const AUTH_KEY = "precued.auth";
 const PARTICIPANT_KEY = "precued.participant";
 const GRANT_IDS_KEY = "precued.grantIds";
 
+/**
+ * Called on every 401 response (see lib/api.ts's request()) — none of these
+ * three are trustworthy once the backend has rejected a request as
+ * unauthenticated, and leaving a stale sessionToken in storage would just
+ * send it again on the very next request.
+ */
+export function clearSession() {
+  sessionStorage.removeItem(AUTH_KEY);
+  sessionStorage.removeItem(PARTICIPANT_KEY);
+  sessionStorage.removeItem(GRANT_IDS_KEY);
+}
+
 export function saveAuthSession(session: SessionResponse) {
   sessionStorage.setItem(AUTH_KEY, JSON.stringify(session));
 }

@@ -1,5 +1,5 @@
 import { FormEvent, useMemo, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { AppShell } from "../components/AppShell";
 import { api } from "../lib/api";
 import { saveAuthSession, saveParticipant } from "../lib/session";
@@ -7,13 +7,19 @@ import { saveAuthSession, saveParticipant } from "../lib/session";
 export default function AuthPage() {
   const navigate = useNavigate();
   const { roomId, roomRoleId } = useParams();
+  const [searchParams] = useSearchParams();
   const isInviteRoute = Boolean(roomId && roomRoleId);
   const [email, setEmail] = useState("");
   const [guestName, setGuestName] = useState("");
   const [linkRequested, setLinkRequested] = useState(false);
   const [magicToken, setMagicToken] = useState("");
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  // lib/api.ts's request() redirects here (full navigation, not a client
+  // route change) on any 401, appending this so the reason survives that
+  // reload instead of getting lost as unpersisted component state.
+  const [error, setError] = useState<string | null>(
+    searchParams.get("sessionExpired") ? "Your session has expired. Please sign in again." : null,
+  );
 
   const guestHelper = useMemo(
     () => isInviteRoute ? "Your invite is ready. Enter your name to join." : "Open a role-specific invite link to join as a guest.",
