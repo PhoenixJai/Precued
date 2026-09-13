@@ -45,7 +45,12 @@ precued:
     host: ${LIVEKIT_HOST:} # wss://<project>.livekit.cloud — LiveKitConfig derives the https:// REST URL from this itself
   auth:
     magic-link:
-      base-url: ${APP_BASE_URL:http://localhost:5173}
+      # Was bound to a separate APP_BASE_URL env var that was never set in
+      # production (FRONTEND_ORIGIN below only fed CORS) — magic links kept
+      # silently linking to the http://localhost:5173 fallback. This is the
+      # same "frontend's origin" value as precued.web.allowed-origin below;
+      # one env var for both.
+      base-url: ${FRONTEND_ORIGIN:http://localhost:5173}
       token-ttl-minutes: 15
       # Resend's HTTP API (not their SMTP relay — Railway blocks outbound
       # port 587). onboarding@resend.dev works unverified for testing
