@@ -5,7 +5,7 @@ import { api } from "../lib/api";
 import { saveParticipant } from "../lib/session";
 import type { InvitePreview } from "../types/precued";
 
-/** Guest entry is now backed by an opaque Invite token, not a client-chosen RoomRole id. */
+/** Guest entry is backed by an opaque Invite token, not a client-chosen RoomRole id. */
 export default function GuestJoinPage() {
   const navigate = useNavigate();
   const { inviteToken } = useParams();
@@ -49,15 +49,6 @@ export default function GuestJoinPage() {
     setLoading(true);
     setError(null);
     try {
-      // The opaque token determines the role on the server. The public role
-      // snapshot is fetched only so the client can preserve the readable
-      // role key/name in its local participant session after the join.
-      const roles = await api.getRoomRoles(preview.roomId);
-      const invitedRole = roles.find((role) => role.id === preview.roomRoleId);
-      if (!invitedRole || invitedRole.isHostRole) {
-        throw new Error("This invitation does not resolve to a guest role.");
-      }
-
       const participant = await api.joinRoom(
         preview.roomId,
         guestName.trim(),
@@ -68,13 +59,14 @@ export default function GuestJoinPage() {
 
       // InviteJoinService already created the ParticipantRoleAssignment in
       // the same transaction that consumed the Invite — no client-side
-      // self-assignment step remains.
+      // self-assignment step remains. The preview is only display/session
+      // metadata; the backend token remains the authority for the role.
       saveParticipant({
         id: participant.id,
         roomId: preview.roomId,
-        roomRoleId: invitedRole.id,
-        roleKey: invitedRole.roleKey,
-        roleName: invitedRole.name,
+        roomRoleId: preview.roomRoleId,
+        roleKey: preview.roleKey,
+        roleName: preview.roleName,
         isHost: false,
         displayName: participant.displayName,
         userId: null,
