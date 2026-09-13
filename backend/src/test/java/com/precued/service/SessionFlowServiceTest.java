@@ -6,6 +6,7 @@ import com.precued.entity.Room;
 import com.precued.entity.RoomParticipant;
 import com.precued.entity.RoomRole;
 import com.precued.entity.RoomStage;
+import com.precued.entity.RoomStageRole;
 import com.precued.repository.ParticipantRoleAssignmentRepository;
 import com.precued.repository.RoomRepository;
 import com.precued.repository.RoomStageRepository;
@@ -109,6 +110,26 @@ class SessionFlowServiceTest {
 
         assertThat(service.get(room.getId()).status())
                 .isEqualTo(SessionFlowResponse.FlowStatus.NOT_STARTED);
+    }
+
+    @Test
+    void get_includesStageRoleIdsForCallUi() {
+        RoomStage first = stage("evidence_review", 0, RoomStage.Status.PENDING, null);
+        RoomRole defense = new RoomRole();
+        defense.setId(UUID.randomUUID());
+        defense.setRoom(room);
+        RoomStageRole stageRole = new RoomStageRole();
+        stageRole.setRoomStage(first);
+        stageRole.setRoomRole(defense);
+
+        when(roomRepository.findById(room.getId())).thenReturn(Optional.of(room));
+        when(roomStageRepository.findByRoomIdOrderBySortOrder(room.getId())).thenReturn(List.of(first));
+        when(roomStageRoleRepository.findByRoomStageId(first.getId())).thenReturn(List.of(stageRole));
+
+        SessionFlowResponse response = service.get(room.getId());
+
+        assertThat(response.stages()).singleElement().satisfies(stage ->
+                assertThat(stage.roomRoleIds()).containsExactly(defense.getId()));
     }
 
     @Test
