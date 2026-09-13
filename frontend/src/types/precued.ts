@@ -71,6 +71,7 @@ export interface RoomInvite {
 export interface InvitePreview {
   roomId: string;
   roomRoleId: string;
+  roleKey: string;
   roleName: string;
   mode: InviteMode;
   expiresAt: string | null;
