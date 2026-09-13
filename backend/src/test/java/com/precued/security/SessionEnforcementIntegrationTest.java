@@ -83,17 +83,23 @@ class SessionEnforcementIntegrationTest {
     }
 
     @Test
-    void guestJoin_stillWorksWithNoSessionAtAll_hybridAuthUnbroken() throws Exception {
+    void guestJoin_stillReachableWithNoSessionAtAll_hybridAuthUnbroken() throws Exception {
         // The one thing this whole migration must never break: a guest join
         // sends no token by design (see AuthSessionInterceptor's Javadoc)
         // and must not be caught by the new "authenticated()" gate — this
-        // exact path is one of SecurityConfig's permitAll entries.
+        // exact path is one of SecurityConfig's permitAll entries. PR 9 made
+        // an Invite token mandatory to actually create the participant, so
+        // the request is now rejected 403 by InviteJoinService (a business
+        // rule, reached after authentication) rather than accepted 201 —
+        // but a 401 here would mean the permitAll rule regressed and the
+        // framework-level gate is catching guests before they can even
+        // attempt to redeem an invite. That's what this still verifies.
         Room room = persistRoom();
 
         mockMvc.perform(post("/api/room-participants")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"roomId\":\"" + room.getId() + "\",\"userId\":null,\"displayName\":\"Guest\"}"))
-                .andExpect(status().isCreated());
+                .andExpect(status().isForbidden());
     }
 
     @Test

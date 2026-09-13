@@ -184,8 +184,8 @@ export const api = {
   },
 
   expireRoomInvite(roomId: string, inviteId: string) {
-    return request<RoomInvite>(`/api/rooms/${roomId}/invites/${inviteId}/expire`, {
-      method: "POST",
+    return request<RoomInvite>(`/api/rooms/${roomId}/invites/${inviteId}`, {
+      method: "DELETE",
     });
   },
 
