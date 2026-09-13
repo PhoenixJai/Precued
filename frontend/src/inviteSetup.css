@@ -87,6 +87,13 @@
   font-size: 11px;
 }
 
+.invite-record-actions {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  flex-shrink: 0;
+}
+
 .invite-create-grid {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
@@ -162,6 +169,14 @@
   .invite-create-row {
     align-items: stretch;
     flex-direction: column;
+  }
+
+  .invite-record-actions {
+    width: 100%;
+  }
+
+  .invite-record-actions button {
+    flex: 1;
   }
 
   .invite-role-heading .status-pill {
