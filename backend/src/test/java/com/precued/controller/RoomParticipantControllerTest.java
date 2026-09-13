@@ -7,6 +7,7 @@ import com.precued.entity.RoomParticipant;
 import com.precued.repository.AuthSessionRepository;
 import com.precued.repository.RoomParticipantRepository;
 import com.precued.security.PublicEndpointRateLimiter;
+import com.precued.service.InviteJoinService;
 import com.precued.service.LiveKitTokenService;
 import com.precued.service.RoomParticipantService;
 import org.junit.jupiter.api.Test;
@@ -22,7 +23,6 @@ import java.util.Optional;
 import java.util.UUID;
 
 import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -32,13 +32,12 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @WebMvcTest(RoomParticipantController.class)
-// Real SecurityConfig, not disabled — @WebMvcTest doesn't pick up plain
-// @Configuration beans like SecurityConfig on its own.
 @Import(SecurityConfig.class)
 class RoomParticipantControllerTest {
 
     @Autowired private MockMvc mockMvc;
     @MockBean private RoomParticipantService roomParticipantService;
+    @MockBean private InviteJoinService inviteJoinService;
     @MockBean private LiveKitTokenService liveKitTokenService;
     @MockBean private PublicEndpointRateLimiter rateLimiter;
     @MockBean private RoomParticipantRepository roomParticipantRepository;
@@ -46,7 +45,6 @@ class RoomParticipantControllerTest {
 
     private static final String TEST_TOKEN = "test-session-token";
 
-    /** Stubs a valid session for exactly this participant — required to act on /livekit-token as yourself. */
     private void stubAuthenticatedParticipant(UUID participantId) {
         RoomParticipant self = new RoomParticipant();
         self.setId(participantId);
@@ -57,7 +55,7 @@ class RoomParticipantControllerTest {
     }
 
     @Test
-    void join_guestNoUserId_returns201() throws Exception {
+    void join_guestWithInviteToken_returns201() throws Exception {
         UUID roomId = UUID.randomUUID();
         UUID participantId = UUID.randomUUID();
 
@@ -71,10 +69,10 @@ class RoomParticipantControllerTest {
         participant.setDisplayName("Guest Client");
         participant.setJoinedAt(Instant.now());
 
-        when(roomParticipantService.join(eq(roomId), isNull(), eq("Guest Client"))).thenReturn(participant);
+        when(inviteJoinService.join(eq(roomId), eq("invite-token"), eq("Guest Client"))).thenReturn(participant);
 
         String body = """
-                {"roomId":"%s","displayName":"Guest Client"}
+                {"roomId":"%s","displayName":"Guest Client","inviteToken":"invite-token"}
                 """.formatted(roomId);
 
         mockMvc.perform(post("/api/room-participants").contentType(MediaType.APPLICATION_JSON).content(body))
@@ -83,14 +81,17 @@ class RoomParticipantControllerTest {
                 .andExpect(jsonPath("$.roomId").value(roomId.toString()))
                 .andExpect(jsonPath("$.userId").doesNotExist())
                 .andExpect(jsonPath("$.accessLevel").value("MEMBER"))
-                .andExpect(jsonPath("$.livekitIdentity").value(livekitIdentity))
-                .andExpect(jsonPath("$.livekitIdentity").isNotEmpty());
+                .andExpect(jsonPath("$.livekitIdentity").value(livekitIdentity));
+
+        verify(roomParticipantService, never()).join(
+                org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any(),
+                org.mockito.ArgumentMatchers.any());
     }
 
     @Test
     void join_missingDisplayName_returns400() throws Exception {
         String body = """
-                {"roomId":"%s"}
+                {"roomId":"%s","inviteToken":"invite-token"}
                 """.formatted(UUID.randomUUID());
 
         mockMvc.perform(post("/api/room-participants").contentType(MediaType.APPLICATION_JSON).content(body))
@@ -99,13 +100,13 @@ class RoomParticipantControllerTest {
     }
 
     @Test
-    void join_unknownRoom_returns404() throws Exception {
+    void join_unknownInvite_returns404() throws Exception {
         UUID roomId = UUID.randomUUID();
-        when(roomParticipantService.join(eq(roomId), isNull(), eq("Guest")))
-                .thenThrow(new IllegalArgumentException("No Room with id " + roomId));
+        when(inviteJoinService.join(eq(roomId), eq("missing-token"), eq("Guest")))
+                .thenThrow(new IllegalArgumentException("No invite with this token"));
 
         String body = """
-                {"roomId":"%s","displayName":"Guest"}
+                {"roomId":"%s","displayName":"Guest","inviteToken":"missing-token"}
                 """.formatted(roomId);
 
         mockMvc.perform(post("/api/room-participants").contentType(MediaType.APPLICATION_JSON).content(body))
@@ -113,19 +114,11 @@ class RoomParticipantControllerTest {
                 .andExpect(jsonPath("$.status").value(404));
     }
 
-    /**
-     * AuthSessionInterceptor can't require a token on this path (a guest
-     * join legitimately sends none), but a token that IS present must still
-     * resolve — this is the one auth-session behavior on this endpoint
-     * that's actually observable at the controller layer, since whether a
-     * userId claim required one at all is decided inside the (here, mocked)
-     * service — see RoomParticipantServiceTest for that.
-     */
     @Test
     void join_invalidAuthorizationToken_returns401AndNeverCallsService() throws Exception {
         when(authSessionRepository.findByToken("bogus-token")).thenReturn(Optional.empty());
         String body = """
-                {"roomId":"%s","displayName":"Guest"}
+                {"roomId":"%s","displayName":"Guest","inviteToken":"invite-token"}
                 """.formatted(UUID.randomUUID());
 
         mockMvc.perform(post("/api/room-participants")
@@ -135,6 +128,9 @@ class RoomParticipantControllerTest {
                 .andExpect(status().isUnauthorized());
 
         verify(roomParticipantService, never()).join(
+                org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any(),
+                org.mockito.ArgumentMatchers.any());
+        verify(inviteJoinService, never()).join(
                 org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any(),
                 org.mockito.ArgumentMatchers.any());
     }
