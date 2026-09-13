@@ -117,6 +117,29 @@ class InviteServiceTest {
     }
 
     @Test
+    void createNamedInvite_ignoresExpiredPendingReservation() {
+        when(roomRoleRepository.findByIdForUpdate(candidateRole.getId())).thenReturn(Optional.of(candidateRole));
+        when(assignmentRepository.countByRoomRoleIdAndRevokedAtIsNull(candidateRole.getId())).thenReturn(2L);
+
+        Invite expiredPending = new Invite();
+        expiredPending.setRoomRole(candidateRole);
+        expiredPending.setMode(Invite.Mode.NAMED);
+        expiredPending.setMaxUses(1);
+        expiredPending.setUsesCount(0);
+        expiredPending.setStatus(Invite.Status.PENDING);
+        expiredPending.setExpiresAt(Instant.now().minusSeconds(1));
+        when(inviteRepository.findByRoomRoleId(candidateRole.getId())).thenReturn(List.of(expiredPending));
+        when(inviteRepository.save(any(Invite.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        Invite created = service.create(
+                room.getId(), candidateRole.getId(), Invite.Mode.NAMED,
+                "replacement@example.com", null, null);
+
+        assertThat(created.getStatus()).isEqualTo(Invite.Status.PENDING);
+        assertThat(created.getInviteeEmail()).isEqualTo("replacement@example.com");
+    }
+
+    @Test
     void createPoolInvite_forUnlimitedRole_requiresExplicitMaxUses() {
         candidateRole.setMaxMembers(null);
         when(roomRoleRepository.findByIdForUpdate(candidateRole.getId())).thenReturn(Optional.of(candidateRole));
@@ -154,7 +177,7 @@ class InviteServiceTest {
         invite.setMode(Invite.Mode.NAMED);
         invite.setMaxUses(1);
         invite.setUsesCount(0);
-        when(inviteRepository.findById(invite.getId())).thenReturn(Optional.of(invite));
+        when(inviteRepository.findByIdForUpdate(invite.getId())).thenReturn(Optional.of(invite));
         when(inviteRepository.save(any(Invite.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
         Invite expired = service.expire(room.getId(), invite.getId());
