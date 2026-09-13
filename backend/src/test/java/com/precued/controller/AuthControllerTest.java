@@ -5,6 +5,9 @@ import com.precued.entity.MagicLinkToken;
 import com.precued.entity.User;
 import com.precued.repository.AuthSessionRepository;
 import com.precued.repository.RoomParticipantRepository;
+import com.precued.security.EmailAlreadyRegisteredException;
+import com.precued.security.InvalidCredentialsException;
+import com.precued.service.AccountService;
 import com.precued.service.AuthService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -32,6 +35,7 @@ class AuthControllerTest {
 
     @Autowired private MockMvc mockMvc;
     @MockBean private AuthService authService;
+    @MockBean private AccountService accountService;
     // /api/auth/** is excluded from ParticipantSessionInterceptor and never
     // reaches AuthSessionInterceptor either, but WebMvcConfig (which
     // @WebMvcTest picks up) wires both interceptor beans regardless, so
@@ -95,5 +99,76 @@ class AuthControllerTest {
                         .content("{\"token\":\"expired-token\"}"))
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.detail").value("Magic link token has expired"));
+    }
+
+    @Test
+    void signUp_validRequest_returns201WithSession() throws Exception {
+        User user = new User();
+        user.setId(UUID.randomUUID());
+        user.setEmail("host@example.com");
+
+        AuthSession session = new AuthSession();
+        session.setUser(user);
+        session.setToken("session-token-value");
+        session.setExpiresAt(Instant.now().plusSeconds(86400));
+        when(accountService.signUp(eq("host@example.com"), eq("correct horse battery"), eq("Alex Host")))
+                .thenReturn(session);
+
+        mockMvc.perform(post("/api/auth/signup")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"email\":\"host@example.com\",\"password\":\"correct horse battery\",\"displayName\":\"Alex Host\"}"))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.sessionToken").value("session-token-value"))
+                .andExpect(jsonPath("$.userId").value(user.getId().toString()))
+                .andExpect(jsonPath("$.email").value("host@example.com"));
+    }
+
+    @Test
+    void signUp_shortPassword_returns400() throws Exception {
+        mockMvc.perform(post("/api/auth/signup")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"email\":\"host@example.com\",\"password\":\"short\",\"displayName\":\"Alex Host\"}"))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void signUp_emailAlreadyRegistered_returns409() throws Exception {
+        when(accountService.signUp(eq("host@example.com"), eq("correct horse battery"), eq("Alex Host")))
+                .thenThrow(new EmailAlreadyRegisteredException("An account with email host@example.com already exists"));
+
+        mockMvc.perform(post("/api/auth/signup")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"email\":\"host@example.com\",\"password\":\"correct horse battery\",\"displayName\":\"Alex Host\"}"))
+                .andExpect(status().isConflict());
+    }
+
+    @Test
+    void logIn_validCredentials_returns200WithSession() throws Exception {
+        User user = new User();
+        user.setId(UUID.randomUUID());
+        user.setEmail("host@example.com");
+
+        AuthSession session = new AuthSession();
+        session.setUser(user);
+        session.setToken("session-token-value");
+        session.setExpiresAt(Instant.now().plusSeconds(86400));
+        when(accountService.logIn(eq("host@example.com"), eq("correct horse battery"))).thenReturn(session);
+
+        mockMvc.perform(post("/api/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"email\":\"host@example.com\",\"password\":\"correct horse battery\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.sessionToken").value("session-token-value"));
+    }
+
+    @Test
+    void logIn_wrongCredentials_returns401() throws Exception {
+        when(accountService.logIn(eq("host@example.com"), eq("wrong")))
+                .thenThrow(new InvalidCredentialsException("Invalid email or password"));
+
+        mockMvc.perform(post("/api/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"email\":\"host@example.com\",\"password\":\"wrong\"}"))
+                .andExpect(status().isUnauthorized());
     }
 }

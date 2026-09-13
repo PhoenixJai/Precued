@@ -1,6 +1,8 @@
 package com.precued.controller;
 
 import com.precued.security.AuthenticationRequiredException;
+import com.precued.security.EmailAlreadyRegisteredException;
+import com.precued.security.InvalidCredentialsException;
 import com.precued.service.PresentationUploadException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
@@ -29,6 +31,18 @@ public class GlobalExceptionHandler {
     /** "We don't know who you are" — a body field claimed a User identity with no AuthSession to back it. */
     @ExceptionHandler(AuthenticationRequiredException.class)
     public ProblemDetail handleAuthenticationRequired(AuthenticationRequiredException e) {
+        return ProblemDetail.forStatusAndDetail(HttpStatus.UNAUTHORIZED, e.getMessage());
+    }
+
+    /** Signup with an email that's already registered. */
+    @ExceptionHandler(EmailAlreadyRegisteredException.class)
+    public ProblemDetail handleEmailAlreadyRegistered(EmailAlreadyRegisteredException e) {
+        return ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, e.getMessage());
+    }
+
+    /** Login with a wrong password, unknown email, or an email with no password set — same response either way. */
+    @ExceptionHandler(InvalidCredentialsException.class)
+    public ProblemDetail handleInvalidCredentials(InvalidCredentialsException e) {
         return ProblemDetail.forStatusAndDetail(HttpStatus.UNAUTHORIZED, e.getMessage());
     }
 

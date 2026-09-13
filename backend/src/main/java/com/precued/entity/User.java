@@ -23,6 +23,10 @@ public class User {
     @Column(name = "display_name", nullable = false)
     private String displayName;
 
+    /** Null for a User row created via magic-link (guest-join, pre-overhaul) — never used as a login path. */
+    @Column(name = "password_hash")
+    private String passwordHash;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
 }
