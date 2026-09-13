@@ -11,7 +11,7 @@ const customTemplate: TemplateSummary = {
 
 function role(overrides: Partial<TemplateRoleDefinition> = {}): TemplateRoleDefinition {
   return {
-    id: crypto.randomUUID(),
+    id: "role-1",
     templateId: customTemplate.id,
     roleKey: "participant",
     name: "Participant",
