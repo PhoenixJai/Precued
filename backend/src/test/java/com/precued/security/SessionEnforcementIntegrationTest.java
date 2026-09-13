@@ -12,7 +12,9 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.http.MediaType;
+import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
 
@@ -46,6 +48,28 @@ class SessionEnforcementIntegrationTest {
     @Autowired private UserRepository userRepository;
     @Autowired private RoomRepository roomRepository;
     @Autowired private RoomParticipantRepository roomParticipantRepository;
+
+    // Real JavaMailSenderImpl would try to actually connect (blank SMTP_HOST
+    // in this profile) once the request reaches AuthService — mocked purely
+    // so magicLink_noSessionHeader_isPublicNotAuthenticated can assert on
+    // the real HTTP status this endpoint returns, not an unrelated mail
+    // connection failure.
+    @MockBean private JavaMailSender mailSender;
+
+    @Test
+    void magicLink_noSessionHeader_isPublicNotAuthenticated() throws Exception {
+        // Live incident: POST /api/auth/magic-link reported 401 in
+        // production despite /api/auth/** being in SecurityConfig's
+        // permitAll list. This is the exact endpoint, hit through the real
+        // filter chain (not just @Import(SecurityConfig.class) on a
+        // @WebMvcTest slice, per the explicit ask) — no Authorization
+        // header, so a 401 here would mean this permitAll rule genuinely
+        // isn't taking effect against the deployed SecurityConfig bean.
+        mockMvc.perform(post("/api/auth/magic-link")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"email\":\"host@example.com\"}"))
+                .andExpect(status().isAccepted());
+    }
 
     @Test
     void writeEndpoint_noSessionAtAll_rejected401BeforeReachingTheController() throws Exception {
