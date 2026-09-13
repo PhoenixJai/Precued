@@ -125,6 +125,35 @@ export interface TemplateRoleDefinition {
   sortOrder: number;
 }
 
+/** Config-time Session Flow stage edited by the custom-template builder. */
+export interface TemplateSessionFlowStageDefinition {
+  id: string;
+  stageKey: string;
+  name: string;
+  sortOrder: number;
+  durationSeconds: number | null;
+  templateRoleIds: string[];
+}
+
+/** Saved config-time Session Flow definition. */
+export interface TemplateSessionFlowDefinition {
+  templateId: string;
+  enabled: boolean;
+  stages: TemplateSessionFlowStageDefinition[];
+}
+
+/** Whole-definition save input; null stage id means create a new stage. */
+export interface SaveTemplateSessionFlowInput {
+  enabled: boolean;
+  stages: Array<{
+    id: string | null;
+    stageKey: string;
+    name: string;
+    durationSeconds: number | null;
+    templateRoleIds: string[];
+  }>;
+}
+
 export interface TemplatePreset {
   id: string;
   templateId: string;
