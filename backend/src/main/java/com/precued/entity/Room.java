@@ -21,10 +21,6 @@ public class Room {
     @JoinColumn(name = "template_id", nullable = false)
     private Template template;
 
-    /** Readable Template.name snapshot captured when the Room is created. */
-    @Column(name = "template_name", nullable = false)
-    private String templateName;
-
     @ManyToOne(optional = false, fetch = FetchType.LAZY)
     @JoinColumn(name = "created_by_user_id", nullable = false)
     private User createdBy;
