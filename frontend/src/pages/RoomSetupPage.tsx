@@ -3,10 +3,10 @@ import type { ReactNode } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { AppShell } from "../components/AppShell";
 import { api } from "../lib/api";
+import { roomTemplateTitle } from "../lib/customTemplateLaunch";
 import { initials } from "../lib/initials";
 import { buildRoleSetupRows } from "../lib/roleSetup";
 import { getParticipant } from "../lib/session";
-import { templateName } from "../lib/templates";
 import type { Room, RoomParticipantWithGrants, RoomRole } from "../types/precued";
 
 export default function RoomSetupPage() {
@@ -63,7 +63,7 @@ export default function RoomSetupPage() {
     window.setTimeout(() => setCopiedRoleId(null), 1400);
   }
 
-  const templateTitle = room ? templateName(room.templateId) : "session";
+  const templateTitle = room ? roomTemplateTitle(room.templateId, room.templateName) : "session";
 
   return (
     <AppShell showTaglines={false}>

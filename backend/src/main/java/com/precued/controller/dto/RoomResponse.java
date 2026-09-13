@@ -8,6 +8,7 @@ import java.util.UUID;
 public record RoomResponse(
         UUID id,
         String templateId,
+        String templateName,
         UUID createdByUserId,
         String livekitRoomName,
         Room.Status status,
@@ -18,6 +19,7 @@ public record RoomResponse(
         return new RoomResponse(
                 room.getId(),
                 room.getTemplate().getId(),
+                room.getTemplate().getName(),
                 room.getCreatedBy().getId(),
                 room.getLivekitRoomName(),
                 room.getStatus(),

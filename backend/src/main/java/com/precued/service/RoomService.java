@@ -177,7 +177,7 @@ public class RoomService {
     }
 
     public Room get(UUID roomId) {
-        return roomRepository.findById(roomId)
+        return roomRepository.findByIdWithTemplate(roomId)
                 .orElseThrow(() -> new IllegalArgumentException("No Room with id " + roomId));
     }
 

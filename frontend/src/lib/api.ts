@@ -13,12 +13,12 @@ import type {
   Share,
   ShareRoleGrant,
   ShareSlide,
-  TemplateId,
   TemplatePreset,
   TemplateRoleDefinition,
   TemplateSummary,
 } from "../types/precued";
 import { clearSession, getAuthSession, getParticipant } from "./session";
+import { rememberTemplateName } from "./templates";
 
 const API_BASE = import.meta.env.VITE_API_BASE ?? "";
 
@@ -168,8 +168,11 @@ export const api = {
    * determines who this room is created by — the backend derives
    * createdByUserId from it (AuthSessionInterceptor), never from a body
    * field, since a body field was the original vulnerability.
+   *
+   * templateId is a string because custom Templates use generated ids; the
+   * backend remains the authority for ownership/visibility.
    */
-  createRoom(templateId: TemplateId, authSessionToken: string) {
+  createRoom(templateId: string, authSessionToken: string) {
     return request<Room>("/api/rooms", {
       method: "POST",
       headers: { Authorization: `Bearer ${authSessionToken}` },
@@ -180,8 +183,10 @@ export const api = {
     });
   },
 
-  getRoom(roomId: string) {
-    return request<Room>(`/api/rooms/${roomId}`);
+  async getRoom(roomId: string) {
+    const room = await request<Room>(`/api/rooms/${roomId}`);
+    rememberTemplateName(room.templateId, room.templateName);
+    return room;
   },
 
   getSessionFlow(roomId: string) {
@@ -228,10 +233,12 @@ export const api = {
     return request<LiveKitTokenResponse>(`/api/room-participants/${roomParticipantId}/livekit-token`);
   },
 
-  getPresets(templateId: TemplateId) {
-    // Built-in presets are public. Do not attach the RoomParticipant token:
+  getPresets(templateId: string) {
+    // Preset reads are public. Do not attach the RoomParticipant token:
     // AuthSessionInterceptor owns /api/templates/** and interprets any bearer
     // there as an Account/AuthSession token, which caused Start Call to 401.
+    // Custom templates currently return an empty list until custom visibility
+    // configuration is introduced.
     return request<TemplatePreset[]>(`/api/templates/${templateId}/presets`, undefined, "none");
   },
 
