@@ -1,0 +1,133 @@
+.session-flow-dock {
+  width: calc(100% - 72px);
+  margin: 14px auto 0;
+  position: relative;
+  z-index: 2;
+}
+
+.session-flow-panel {
+  min-height: 82px;
+  padding: 14px 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  border-color: #dbe4f3;
+  box-shadow: 0 8px 22px rgba(35, 56, 99, .05);
+}
+
+.session-flow-copy {
+  min-width: 0;
+  flex: 1;
+}
+
+.session-flow-eyebrow {
+  display: block;
+  margin-bottom: 4px;
+  color: #5b6a86;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: .13em;
+}
+
+.session-flow-title-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.session-flow-title-row h2 {
+  margin: 0;
+  color: #192641;
+  font-size: 18px;
+  letter-spacing: -.015em;
+}
+
+.session-flow-position,
+.session-flow-complete-badge {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: #edf3ff;
+  color: #315fc1;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.session-flow-complete-badge {
+  background: #eaf9ef;
+  color: #27824c;
+}
+
+.session-flow-panel p {
+  margin: 5px 0 0;
+  color: #737d92;
+  font-size: 12px;
+}
+
+.session-flow-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 8px;
+}
+
+.session-flow-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 26px;
+  padding: 4px 9px;
+  border-radius: 7px;
+  background: #f4f6fa;
+  color: #4d5870;
+  font-size: 12px;
+}
+
+.session-flow-timer {
+  font-variant-numeric: tabular-nums;
+}
+
+.session-flow-timer.elapsed {
+  background: #fff3e8;
+  color: #9d5b18;
+}
+
+.session-flow-elapsed-note {
+  color: #8b6740;
+  font-size: 11px;
+}
+
+.session-flow-control {
+  flex: 0 0 auto;
+  min-width: 92px;
+}
+
+.session-flow-error {
+  margin-top: 7px;
+  border: 1px solid #ffd1d7;
+  background: #fff2f4;
+  color: #9d2332;
+  padding: 8px 11px;
+  border-radius: 8px;
+  font-size: 12px;
+}
+
+@media (max-width: 760px) {
+  .session-flow-dock {
+    width: calc(100% - 28px);
+  }
+
+  .session-flow-panel {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .session-flow-control {
+    width: 100%;
+  }
+}

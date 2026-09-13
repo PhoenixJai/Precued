@@ -4,6 +4,7 @@ import { BrowserRouter } from "react-router-dom";
 import "@livekit/components-styles";
 import App from "./App";
 import "./styles.css";
+import "./sessionFlow.css";
 
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
