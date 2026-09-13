@@ -49,6 +49,15 @@ export default function GuestJoinPage() {
     setLoading(true);
     setError(null);
     try {
+      // The opaque token determines the role on the server. The public role
+      // snapshot is fetched only so the client can preserve the readable
+      // role key/name in its local participant session after the join.
+      const roles = await api.getRoomRoles(preview.roomId);
+      const invitedRole = roles.find((role) => role.id === preview.roomRoleId);
+      if (!invitedRole || invitedRole.isHostRole) {
+        throw new Error("This invitation does not resolve to a guest role.");
+      }
+
       const participant = await api.joinRoom(
         preview.roomId,
         guestName.trim(),
@@ -63,9 +72,9 @@ export default function GuestJoinPage() {
       saveParticipant({
         id: participant.id,
         roomId: preview.roomId,
-        roomRoleId: preview.roomRoleId,
-        roleKey: preview.roomRoleId,
-        roleName: preview.roleName,
+        roomRoleId: invitedRole.id,
+        roleKey: invitedRole.roleKey,
+        roleName: invitedRole.name,
         isHost: false,
         displayName: participant.displayName,
         userId: null,
