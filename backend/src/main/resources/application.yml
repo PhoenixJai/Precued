@@ -58,6 +58,13 @@ precued:
       # verified sending domain's address for real use.
       from-address: ${MAIL_FROM_ADDRESS:onboarding@resend.dev}
       resend-api-key: ${RESEND_API_KEY:}
+    account:
+      # Deliberately its own config, separate from magic-link's session TTL
+      # (AuthService's hardcoded 24h) even though both currently read 24h —
+      # Account Holder sessions and guest room-tokens are different enough
+      # (Auth & Account Overhaul) that they'll likely need to diverge later,
+      # and this way that's a config change, not a migration.
+      session-ttl-hours: 24
   invite:
     default-ttl-days: 7 # used when Invite.expires_at is not explicitly set and room hasn't ended
   storage:
