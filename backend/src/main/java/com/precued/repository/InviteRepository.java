@@ -12,14 +12,7 @@ import java.util.Optional;
 import java.util.UUID;
 
 public interface InviteRepository extends JpaRepository<Invite, UUID> {
-    @Query("""
-            select i from Invite i
-            join fetch i.roomRole rr
-            join fetch rr.room r
-            where i.token = :token
-            """)
-    Optional<Invite> findByToken(@Param("token") String token);
-
+    Optional<Invite> findByToken(String token);
     List<Invite> findByRoomRoleId(UUID roomRoleId);
 
     @Query("""
@@ -30,6 +23,15 @@ public interface InviteRepository extends JpaRepository<Invite, UUID> {
             order by i.createdAt asc
             """)
     List<Invite> findByRoomId(@Param("roomId") UUID roomId);
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("""
+            select i from Invite i
+            join fetch i.roomRole rr
+            join fetch rr.room r
+            where i.id = :id
+            """)
+    Optional<Invite> findByIdForUpdate(@Param("id") UUID id);
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("""
