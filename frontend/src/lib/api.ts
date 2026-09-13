@@ -296,7 +296,7 @@ export const api = {
     return request<ActiveShare[]>(`/api/rooms/${roomId}/active-shares`);
   },
 
-  startShare(roomId: string, publisherParticipantId: string, appliedPresetId: string, label: string) {
+  startShare(roomId: string, publisherParticipantId: string, appliedPresetId: string | null, label: string) {
     return request<Share>("/api/shares", {
       method: "POST",
       body: JSON.stringify({
