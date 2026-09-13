@@ -79,6 +79,10 @@ public class ParticipantRoleAssignmentService {
                     "RoomParticipant " + roomParticipantId
                             + " has no linked User and cannot be assigned a host role");
         }
+        if (role.getMaxMembers() != null
+                && assignmentRepository.countByRoomRoleIdAndRevokedAtIsNull(roomRoleId) >= role.getMaxMembers()) {
+            throw new IllegalStateException("Role is already at capacity");
+        }
 
         ParticipantRoleAssignment assignment = new ParticipantRoleAssignment();
         assignment.setRoomParticipant(participant);
