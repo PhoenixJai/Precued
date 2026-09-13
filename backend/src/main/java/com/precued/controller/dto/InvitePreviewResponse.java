@@ -9,6 +9,7 @@ import java.util.UUID;
 public record InvitePreviewResponse(
         UUID roomId,
         UUID roomRoleId,
+        String roleKey,
         String roleName,
         Invite.Mode mode,
         Instant expiresAt) {
@@ -17,6 +18,7 @@ public record InvitePreviewResponse(
         return new InvitePreviewResponse(
                 invite.getRoomRole().getRoom().getId(),
                 invite.getRoomRole().getId(),
+                invite.getRoomRole().getRoleKey(),
                 invite.getRoomRole().getName(),
                 invite.getMode(),
                 invite.getExpiresAt());
