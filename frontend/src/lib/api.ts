@@ -17,7 +17,7 @@ import type {
   TemplateRoleDefinition,
   TemplateSummary,
 } from "../types/precued";
-import { clearSession, getParticipant } from "./session";
+import { clearSession, getAuthSession, getParticipant } from "./session";
 
 const API_BASE = import.meta.env.VITE_API_BASE ?? "";
 
@@ -54,8 +54,15 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     // token is worthless once this happens, whatever the reason (expired,
     // revoked, or simply never valid) — clear it and force a fresh sign-in
     // rather than leaving the app stuck retrying with the same bad token.
+    //
+    // Auth & Account Overhaul: "/" is a public landing page with no sign-in
+    // form on it, so an Account Holder's dead session has to land on
+    // /login specifically. Checked before clearing: an Account Holder
+    // session (precued.auth) means /login; a guest's room-scoped session
+    // alone means /, since a guest never had an account to log back into.
+    const wasAccountHolder = Boolean(getAuthSession());
     clearSession();
-    location.assign("/?sessionExpired=1");
+    location.assign(wasAccountHolder ? "/login?sessionExpired=1" : "/?sessionExpired=1");
     throw new Error("Your session has expired. Please sign in again.");
   }
 
@@ -136,6 +143,20 @@ export const api = {
     return request<SessionResponse>("/api/auth/verify", {
       method: "POST",
       body: JSON.stringify({ token }),
+    });
+  },
+
+  signUp(email: string, password: string, displayName: string) {
+    return request<SessionResponse>("/api/auth/signup", {
+      method: "POST",
+      body: JSON.stringify({ email, password, displayName }),
+    });
+  },
+
+  logIn(email: string, password: string) {
+    return request<SessionResponse>("/api/auth/login", {
+      method: "POST",
+      body: JSON.stringify({ email, password }),
     });
   },
 

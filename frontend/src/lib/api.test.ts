@@ -40,18 +40,30 @@ describe("request() 401 handling", () => {
     );
   });
 
-  it("clears the stored session/participant and sends the browser to a fresh sign-in", async () => {
+  it("an Account Holder's expired session clears storage and goes to /login, not the landing page", async () => {
     // Live incident context: chunk 2 confirmed the backend genuinely
     // returns clean 401s now (SecurityConfig's entry point,
     // AuthSessionInterceptor, AuthenticationRequiredException — all three
-    // map to 401). Before this chunk, the frontend just surfaced that as a
-    // raw error banner and left a now-useless token in storage.
+    // map to 401). Auth & Account Overhaul: "/" is now a public marketing
+    // landing page with no sign-in form on it at all, so an Account
+    // Holder's dead session has to land on /login specifically, or there's
+    // nowhere on the page to actually recover from it.
     storage.setItem("precued.auth", JSON.stringify({ sessionToken: "stale-auth" }));
-    storage.setItem("precued.participant", JSON.stringify({ sessionToken: "stale-participant" }));
 
     await expect(api.getRoom("room-1")).rejects.toThrow("Your session has expired. Please sign in again.");
 
     expect(storage.getItem("precued.auth")).toBeNull();
+    expect(assign).toHaveBeenCalledWith("/login?sessionExpired=1");
+  });
+
+  it("a guest's expired room session clears storage and goes to the landing page, not /login", async () => {
+    // A guest never had an account to log back into — /login would be a
+    // dead end for them. Distinguished from the Account Holder case by
+    // whether precued.auth (not precued.participant) was present.
+    storage.setItem("precued.participant", JSON.stringify({ sessionToken: "stale-participant" }));
+
+    await expect(api.getRoom("room-1")).rejects.toThrow("Your session has expired. Please sign in again.");
+
     expect(storage.getItem("precued.participant")).toBeNull();
     expect(assign).toHaveBeenCalledWith("/?sessionExpired=1");
   });

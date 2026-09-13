@@ -45,7 +45,7 @@ export default function TemplatePickerPage() {
   async function createAndJoinRoom(templateId: TemplateId) {
     const auth = getAuthSession();
     if (!auth) {
-      navigate("/");
+      navigate("/login");
       return;
     }
 
@@ -57,8 +57,7 @@ export default function TemplatePickerPage() {
       const hostRole = findHostRole(roles);
       if (!hostRole) throw new Error(`No host role was created for this ${templateName(templateId)} room.`);
 
-      const displayName = auth.email.split("@")[0] || "Host";
-      const participant = await api.joinRoom(room.id, displayName, auth.userId, auth.sessionToken);
+      const participant = await api.joinRoom(room.id, auth.displayName, auth.userId, auth.sessionToken);
       // Save before assignRole: that call requires the session this join
       // just issued (ParticipantSessionInterceptor, backend), read from
       // storage on every request via lib/api.ts's request().

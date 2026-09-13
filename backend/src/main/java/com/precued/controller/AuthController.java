@@ -75,6 +75,7 @@ public class AuthController {
                 session.getToken(),
                 session.getUser().getId(),
                 session.getUser().getEmail(),
+                session.getUser().getDisplayName(),
                 session.getExpiresAt());
     }
 }

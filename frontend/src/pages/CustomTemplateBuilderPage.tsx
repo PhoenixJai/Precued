@@ -20,7 +20,7 @@ export default function CustomTemplateBuilderPage() {
   const auth = getAuthSession();
 
   useEffect(() => {
-    if (!auth) navigate("/");
+    if (!auth) navigate("/login");
   }, [auth, navigate]);
 
   if (!auth) return null;
