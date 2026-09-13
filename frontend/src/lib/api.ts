@@ -8,6 +8,7 @@ import type {
   RoomParticipant,
   RoomParticipantWithGrants,
   RoomRole,
+  SessionFlow,
   SessionResponse,
   Share,
   ShareRoleGrant,
@@ -181,6 +182,18 @@ export const api = {
 
   getRoom(roomId: string) {
     return request<Room>(`/api/rooms/${roomId}`);
+  },
+
+  getSessionFlow(roomId: string) {
+    return request<SessionFlow>(`/api/rooms/${roomId}/session-flow`);
+  },
+
+  startSessionFlow(roomId: string) {
+    return request<SessionFlow>(`/api/rooms/${roomId}/session-flow/start`, { method: "POST" });
+  },
+
+  advanceSessionFlow(roomId: string) {
+    return request<SessionFlow>(`/api/rooms/${roomId}/session-flow/advance`, { method: "POST" });
   },
 
   getRoomRoles(roomId: string) {
