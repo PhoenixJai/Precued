@@ -18,9 +18,9 @@ import java.util.concurrent.atomic.AtomicReference;
  *
  * This is intentionally small and dependency-free for the current single-app
  * deployment: fixed windows stored in-process, keyed by the least spoofable
- * identifier already available to each endpoint (normalized email where the
- * request already contains one; client address for token verification; room +
- * client address for guest joins).
+ * identifier already available to each endpoint. Login and magic-link requests
+ * are keyed by normalized email; signup and token verification by client
+ * address; guest joins by room + client address.
  *
  * If Precued later runs multiple backend replicas, replace this implementation
  * with a shared store (for example Redis) without changing controller call sites.
@@ -52,8 +52,8 @@ public class PublicEndpointRateLimiter {
         check(LOGIN, normalizeEmail(email));
     }
 
-    public void checkSignUp(String email) {
-        check(SIGNUP, normalizeEmail(email));
+    public void checkSignUp(String clientAddress) {
+        check(SIGNUP, normalizeClientAddress(clientAddress));
     }
 
     public void checkMagicLink(String email) {
