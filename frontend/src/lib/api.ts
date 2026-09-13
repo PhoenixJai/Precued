@@ -27,12 +27,14 @@ type ProblemDetail = {
   status?: number;
 };
 
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  // Every request scoped to a Room or to acting as a participant needs this
-  // (see ParticipantSessionInterceptor, backend). Endpoints reachable before
-  // a session exists (auth, room creation, join, templates) just won't have
-  // one in storage yet, and the backend doesn't require it for those.
-  const participant = getParticipant();
+type RequestAuthMode = "participant" | "none";
+
+async function request<T>(path: string, init?: RequestInit, authMode: RequestAuthMode = "participant"): Promise<T> {
+  // Most requests scoped to a Room or to acting as a participant need the
+  // RoomParticipant bearer token. Some public endpoints intentionally must
+  // NOT receive it, because /api/templates/** treats any supplied bearer as
+  // an Account/AuthSession token. Those callers opt out with authMode=none.
+  const participant = authMode === "participant" ? getParticipant() : null;
   // A FormData body (presentation upload) must let the browser set its own
   // multipart/form-data boundary header — forcing application/json here
   // would break the request.
@@ -214,7 +216,10 @@ export const api = {
   },
 
   getPresets(templateId: TemplateId) {
-    return request<TemplatePreset[]>(`/api/templates/${templateId}/presets`);
+    // Built-in presets are public. Do not attach the RoomParticipant token:
+    // AuthSessionInterceptor owns /api/templates/** and interprets any bearer
+    // there as an Account/AuthSession token, which caused Start Call to 401.
+    return request<TemplatePreset[]>(`/api/templates/${templateId}/presets`, undefined, "none");
   },
 
   /**
