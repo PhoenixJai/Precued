@@ -5,6 +5,7 @@ import com.precued.repository.AuthSessionRepository;
 import com.precued.repository.RoomParticipantRepository;
 import com.precued.service.TemplatePresetService;
 import com.precued.service.TemplateService;
+import com.precued.service.TemplateSessionFlowService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
@@ -12,6 +13,8 @@ import org.springframework.context.annotation.Import;
 import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
+
+import java.util.UUID;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.options;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
@@ -23,13 +26,9 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * this config every request fails in the browser with no server-side error
  * to point at (curl doesn't enforce CORS, which is why this went unnoticed
  * until a real browser was involved). precued.web.allowed-origin is the one
- * origin allowed, read from FRONTEND_ORIGIN so it's never hardcoded — same
- * env-var-backed pattern as R2's account id/keys in StorageConfig.
+ * origin allowed, read from FRONTEND_ORIGIN so it's never hardcoded.
  */
 @WebMvcTest(TemplateController.class)
-// Real SecurityConfig, not disabled — this slice now also genuinely
-// exercises the M-Auth OPTIONS-permitAll rule (@WebMvcTest doesn't pick up
-// plain @Configuration beans like SecurityConfig on its own).
 @Import(SecurityConfig.class)
 @TestPropertySource(properties = "precued.web.allowed-origin=https://gregarious-wonder-production-f37b.up.railway.app")
 class WebMvcConfigCorsTest {
@@ -39,6 +38,7 @@ class WebMvcConfigCorsTest {
     @Autowired private MockMvc mockMvc;
     @MockBean private TemplatePresetService templatePresetService;
     @MockBean private TemplateService templateService;
+    @MockBean private TemplateSessionFlowService templateSessionFlowService;
     @MockBean private RoomParticipantRepository roomParticipantRepository;
     @MockBean private AuthSessionRepository authSessionRepository;
 
@@ -50,8 +50,30 @@ class WebMvcConfigCorsTest {
                         .header("Access-Control-Request-Headers", "Authorization"))
                 .andExpect(status().isOk())
                 .andExpect(header().string("Access-Control-Allow-Origin", ALLOWED_ORIGIN))
-                .andExpect(header().string("Access-Control-Allow-Methods", "GET,POST"))
+                .andExpect(header().string("Access-Control-Allow-Methods", "GET,POST,PUT,DELETE"))
                 .andExpect(header().string("Access-Control-Allow-Headers", "Authorization"));
+    }
+
+    @Test
+    void preflight_deleteTemplateRole_allowsDelete() throws Exception {
+        mockMvc.perform(options("/api/templates/{templateId}/roles/{roleId}", "custom-template", UUID.randomUUID())
+                        .header("Origin", ALLOWED_ORIGIN)
+                        .header("Access-Control-Request-Method", "DELETE")
+                        .header("Access-Control-Request-Headers", "Authorization"))
+                .andExpect(status().isOk())
+                .andExpect(header().string("Access-Control-Allow-Origin", ALLOWED_ORIGIN))
+                .andExpect(header().string("Access-Control-Allow-Methods", "GET,POST,PUT,DELETE"));
+    }
+
+    @Test
+    void preflight_saveTemplateSessionFlow_allowsPut() throws Exception {
+        mockMvc.perform(options("/api/templates/{templateId}/session-flow", "custom-template")
+                        .header("Origin", ALLOWED_ORIGIN)
+                        .header("Access-Control-Request-Method", "PUT")
+                        .header("Access-Control-Request-Headers", "Authorization,Content-Type"))
+                .andExpect(status().isOk())
+                .andExpect(header().string("Access-Control-Allow-Origin", ALLOWED_ORIGIN))
+                .andExpect(header().string("Access-Control-Allow-Methods", "GET,POST,PUT,DELETE"));
     }
 
     @Test
