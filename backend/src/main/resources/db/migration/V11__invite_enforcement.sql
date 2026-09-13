@@ -6,6 +6,10 @@ ALTER TABLE participant_role_assignment
 CREATE INDEX idx_pra_invite_id ON participant_role_assignment(invite_id);
 
 ALTER TABLE invite
-    ADD CONSTRAINT invite_max_uses_positive CHECK (max_uses > 0),
-    ADD CONSTRAINT invite_uses_count_nonnegative CHECK (uses_count >= 0),
+    ADD CONSTRAINT invite_max_uses_positive CHECK (max_uses > 0);
+
+ALTER TABLE invite
+    ADD CONSTRAINT invite_uses_count_nonnegative CHECK (uses_count >= 0);
+
+ALTER TABLE invite
     ADD CONSTRAINT invite_uses_within_limit CHECK (uses_count <= max_uses);
