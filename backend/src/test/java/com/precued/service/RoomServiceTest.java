@@ -7,8 +7,12 @@ import com.precued.entity.TemplateRole;
 import com.precued.entity.User;
 import com.precued.repository.RoomRepository;
 import com.precued.repository.RoomRoleRepository;
+import com.precued.repository.RoomStageRepository;
+import com.precued.repository.RoomStageRoleRepository;
 import com.precued.repository.TemplateRepository;
 import com.precued.repository.TemplateRoleRepository;
+import com.precued.repository.TemplateStageRepository;
+import com.precued.repository.TemplateStageRoleRepository;
 import com.precued.repository.UserRepository;
 import com.precued.security.CurrentUserContext;
 import org.junit.jupiter.api.AfterEach;
@@ -44,8 +48,12 @@ class RoomServiceTest {
 
     @Mock private RoomRepository roomRepository;
     @Mock private RoomRoleRepository roomRoleRepository;
+    @Mock private RoomStageRepository roomStageRepository;
+    @Mock private RoomStageRoleRepository roomStageRoleRepository;
     @Mock private TemplateRepository templateRepository;
     @Mock private TemplateRoleRepository templateRoleRepository;
+    @Mock private TemplateStageRepository templateStageRepository;
+    @Mock private TemplateStageRoleRepository templateStageRoleRepository;
     @Mock private UserRepository userRepository;
 
     private RoomService service;
@@ -56,11 +64,22 @@ class RoomServiceTest {
     @BeforeEach
     void setUp() {
         service = new RoomService(
-                roomRepository, roomRoleRepository, templateRepository, templateRoleRepository, userRepository);
+                roomRepository,
+                roomRoleRepository,
+                roomStageRepository,
+                roomStageRoleRepository,
+                templateRepository,
+                templateRoleRepository,
+                templateStageRepository,
+                templateStageRoleRepository,
+                userRepository);
 
         Template template = new Template();
         template.setId(templateId);
         when(templateRepository.findById(templateId)).thenReturn(Optional.of(template));
+        org.mockito.Mockito.lenient()
+                .when(templateStageRepository.findByTemplateIdOrderBySortOrder(templateId))
+                .thenReturn(List.of());
 
         User user = new User();
         user.setId(userId);
@@ -95,8 +114,6 @@ class RoomServiceTest {
         verify(roomRoleRepository).saveAll(captor.capture());
         List<RoomRole> savedRoles = captor.getValue();
 
-        // Exactly one RoomRole per TemplateRole under the template — the
-        // core assertion for the bug: room_role must not stay empty.
         assertThat(savedRoles).hasSize(3);
         assertThat(savedRoles).allMatch(role -> role.getRoom() == room);
 
@@ -116,8 +133,6 @@ class RoomServiceTest {
         assertThat(savedObserver.getRoleKey()).isEqualTo("observer");
         assertThat(savedObserver.isHostRole()).isFalse();
 
-        // Exactly one host role among the copied set — matches the seeded
-        // sales_call template (Sales Rep is the only host role).
         assertThat(savedRoles).filteredOn(RoomRole::isHostRole).hasSize(1);
     }
 
@@ -132,12 +147,6 @@ class RoomServiceTest {
         assertThat(captor.getValue()).isEmpty();
     }
 
-    /**
-     * The actual fix for the userId-spoofing vulnerability: create() takes
-     * no userId parameter at all now, so there's nothing for a caller to
-     * override — the creator is always whoever CurrentUserContext says
-     * authenticated this request.
-     */
     @Test
     void create_setsCreatedByFromCurrentUserContext() {
         when(templateRoleRepository.findByTemplateIdOrderBySortOrder(templateId)).thenReturn(List.of());
