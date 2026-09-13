@@ -53,7 +53,7 @@ export function SessionFlowPanel(props: {
         </div>
         <div className="session-flow-meta">
           <span className="session-flow-chip">
-            <strong>{isReady ? "Up first" : "Active"}:</strong> {roleNames.length ? roleNames.join(", ") : "All participants"}
+            <strong>{isReady ? "Up first" : "Active"}:</strong> {roleNames.length ? roleNames.join(", ") : "No designated role"}
           </span>
           <span className={`session-flow-chip session-flow-timer ${timer === "0:00" ? "elapsed" : ""}`}>
             <strong>{isReady ? "Duration" : "Time"}:</strong> {timer}
