@@ -168,7 +168,7 @@ export default function RoomSetupPage() {
                   .reduce((sum, invite) => sum + invite.remainingUses, 0);
                 const availableSeats = row.role.maxMembers === null
                   ? null
-                  : Math.max(0, row.role.maxMembers - row.joinedParticipants.length - pendingUses);
+                  : Math.max(0, row.role.maxMembers - row.assignedParticipants.length - pendingUses);
 
                 return (
                   <RoleInviteTracker
