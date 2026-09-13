@@ -46,4 +46,18 @@ describe("custom template room API", () => {
     expect(init.headers).toMatchObject({ Authorization: "Bearer account-session-token" });
     expect(JSON.parse(init.body)).toMatchObject({ templateId, hostDisconnectPolicy: "END_CALL" });
   });
+
+  it("can start a screen share without a TemplatePreset", async () => {
+    await api.startShare("room-1", "participant-1", null, "Screen share");
+
+    const [url, init] = fetchMock.mock.calls[0];
+    expect(url).toContain("/api/shares");
+    expect(init.method).toBe("POST");
+    expect(JSON.parse(init.body)).toMatchObject({
+      roomId: "room-1",
+      publisherParticipantId: "participant-1",
+      appliedPresetId: null,
+      label: "Screen share",
+    });
+  });
 });
