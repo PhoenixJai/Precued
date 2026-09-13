@@ -48,6 +48,10 @@ public class Room {
     @Column(name = "host_disconnect_grace_seconds")
     private Integer hostDisconnectGraceSeconds; // only used when policy = PERSIST_FOR_DURATION
 
+    /** Snapshot of Template.sessionFlowEnabled at Room creation; later template edits do not change it. */
+    @Column(name = "session_flow_enabled", nullable = false)
+    private boolean sessionFlowEnabled = false;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
 

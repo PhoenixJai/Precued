@@ -2,20 +2,31 @@ package com.precued.service;
 
 import com.precued.entity.Room;
 import com.precued.entity.RoomRole;
+import com.precued.entity.RoomStage;
+import com.precued.entity.RoomStageRole;
 import com.precued.entity.Template;
 import com.precued.entity.TemplateRole;
+import com.precued.entity.TemplateStage;
+import com.precued.entity.TemplateStageRole;
 import com.precued.entity.User;
 import com.precued.repository.RoomRepository;
 import com.precued.repository.RoomRoleRepository;
+import com.precued.repository.RoomStageRepository;
+import com.precued.repository.RoomStageRoleRepository;
 import com.precued.repository.TemplateRepository;
 import com.precued.repository.TemplateRoleRepository;
+import com.precued.repository.TemplateStageRepository;
+import com.precued.repository.TemplateStageRoleRepository;
 import com.precued.repository.UserRepository;
 import com.precued.security.CurrentUserContext;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 @Service
@@ -23,45 +34,50 @@ public class RoomService {
 
     private final RoomRepository roomRepository;
     private final RoomRoleRepository roomRoleRepository;
+    private final RoomStageRepository roomStageRepository;
+    private final RoomStageRoleRepository roomStageRoleRepository;
     private final TemplateRepository templateRepository;
     private final TemplateRoleRepository templateRoleRepository;
+    private final TemplateStageRepository templateStageRepository;
+    private final TemplateStageRoleRepository templateStageRoleRepository;
     private final UserRepository userRepository;
 
     public RoomService(
             RoomRepository roomRepository,
             RoomRoleRepository roomRoleRepository,
+            RoomStageRepository roomStageRepository,
+            RoomStageRoleRepository roomStageRoleRepository,
             TemplateRepository templateRepository,
             TemplateRoleRepository templateRoleRepository,
+            TemplateStageRepository templateStageRepository,
+            TemplateStageRoleRepository templateStageRoleRepository,
             UserRepository userRepository) {
         this.roomRepository = roomRepository;
         this.roomRoleRepository = roomRoleRepository;
+        this.roomStageRepository = roomStageRepository;
+        this.roomStageRoleRepository = roomStageRoleRepository;
         this.templateRepository = templateRepository;
         this.templateRoleRepository = templateRoleRepository;
+        this.templateStageRepository = templateStageRepository;
+        this.templateStageRoleRepository = templateStageRoleRepository;
         this.userRepository = userRepository;
     }
 
     /**
-     * hostDisconnectPolicy defaults to END_CALL (Precued_DataModel.md) when
-     * null. Also copies every TemplateRole under the template into a
-     * RoomRole row (Decision #1: "Roles are copied from Template into Room
-     * at creation, not referenced live") — without this, a room has zero
-     * RoomRoles and no host role can ever be assigned to it.
+     * Creates the runtime snapshot for a Template. TemplateRoles become
+     * RoomRoles, and configured TemplateStages/TemplateStageRoles become
+     * RoomStages/RoomStageRoles. All RoomStages begin PENDING; starting and
+     * advancing the flow is deliberately a separate runtime-state-machine
+     * concern.
      *
-     * The creator is CurrentUserContext.get() — the User resolved from the
-     * caller's AuthSession bearer token by AuthSessionInterceptor — never a
-     * request-body field. A body-supplied createdByUserId was the original
-     * vulnerability: any caller could claim to be any existing User.
-     * CurrentUserContext's User comes from a request already closed (the
-     * interceptor's own repository call), so it's re-fetched here inside
-     * this method's own transaction rather than reused directly, matching
-     * how this codebase always re-fetches across a transaction boundary
-     * instead of trusting a possibly-detached entity's non-ID fields.
+     * Session Flow configuration is copied even when the Template's flow is
+     * disabled. The enabled flag is snapshotted separately onto Room, so a
+     * disabled Room can retain the saved stage configuration without using
+     * it. Later Template edits therefore cannot mutate an existing Room.
      *
      * Built-in Templates (createdBy == null) remain launchable by any
      * authenticated account holder. Custom Templates are private-by-default
-     * and may only be launched by their creator, matching TemplateService's
-     * visibility contract. A non-owner gets the same not-found response as
-     * an unknown template so the private template's existence is not leaked.
+     * and may only be launched by their creator.
      */
     @Transactional
     public Room create(String templateId, Room.HostDisconnectPolicy hostDisconnectPolicy) {
@@ -84,14 +100,54 @@ public class RoomService {
         room.setStatus(Room.Status.CREATED);
         room.setHostDisconnectPolicy(
                 hostDisconnectPolicy == null ? Room.HostDisconnectPolicy.END_CALL : hostDisconnectPolicy);
+        room.setSessionFlowEnabled(template.isSessionFlowEnabled());
         room.setCreatedAt(Instant.now());
 
         Room saved = roomRepository.save(room);
 
-        List<RoomRole> roomRoles = templateRoleRepository.findByTemplateIdOrderBySortOrder(templateId).stream()
+        List<TemplateRole> templateRoles = templateRoleRepository.findByTemplateIdOrderBySortOrder(templateId);
+        List<RoomRole> roomRoles = templateRoles.stream()
                 .map(templateRole -> toRoomRole(saved, templateRole))
                 .toList();
         roomRoleRepository.saveAll(roomRoles);
+
+        Map<UUID, RoomRole> roomRoleByTemplateRoleId = new HashMap<>();
+        for (int i = 0; i < templateRoles.size(); i++) {
+            roomRoleByTemplateRoleId.put(templateRoles.get(i).getId(), roomRoles.get(i));
+        }
+
+        List<TemplateStage> templateStages = templateStageRepository.findByTemplateIdOrderBySortOrder(templateId);
+        List<RoomStage> roomStages = templateStages.stream()
+                .map(templateStage -> toRoomStage(saved, templateStage))
+                .toList();
+        roomStageRepository.saveAll(roomStages);
+
+        Map<UUID, RoomStage> roomStageByTemplateStageId = new HashMap<>();
+        for (int i = 0; i < templateStages.size(); i++) {
+            roomStageByTemplateStageId.put(templateStages.get(i).getId(), roomStages.get(i));
+        }
+
+        List<RoomStageRole> roomStageRoles = new ArrayList<>();
+        for (TemplateStage templateStage : templateStages) {
+            RoomStage roomStage = roomStageByTemplateStageId.get(templateStage.getId());
+            for (TemplateStageRole templateStageRole
+                    : templateStageRoleRepository.findByTemplateStageId(templateStage.getId())) {
+                UUID sourceRoleId = templateStageRole.getTemplateRole().getId();
+                RoomRole roomRole = roomRoleByTemplateRoleId.get(sourceRoleId);
+                if (roomRole == null) {
+                    throw new IllegalStateException(
+                            "TemplateStage " + templateStage.getId()
+                                    + " references TemplateRole " + sourceRoleId
+                                    + " outside Template " + templateId);
+                }
+
+                RoomStageRole roomStageRole = new RoomStageRole();
+                roomStageRole.setRoomStage(roomStage);
+                roomStageRole.setRoomRole(roomRole);
+                roomStageRoles.add(roomStageRole);
+            }
+        }
+        roomStageRoleRepository.saveAll(roomStageRoles);
 
         return saved;
     }
@@ -106,6 +162,18 @@ public class RoomService {
         roomRole.setGuestRole(templateRole.isGuestRole());
         roomRole.setMaxMembers(templateRole.getMaxMembers());
         return roomRole;
+    }
+
+    private RoomStage toRoomStage(Room room, TemplateStage templateStage) {
+        RoomStage roomStage = new RoomStage();
+        roomStage.setRoom(room);
+        roomStage.setSourceTemplateStageId(templateStage.getId());
+        roomStage.setStageKey(templateStage.getStageKey());
+        roomStage.setName(templateStage.getName());
+        roomStage.setSortOrder(templateStage.getSortOrder());
+        roomStage.setDurationSeconds(templateStage.getDurationSeconds());
+        roomStage.setStatus(RoomStage.Status.PENDING);
+        return roomStage;
     }
 
     public Room get(UUID roomId) {
