@@ -49,6 +49,11 @@ public class InviteService {
             Instant requestedExpiresAt) {
         requireHost(roomId);
 
+        // Creation serializes on the RoomRole. It deliberately does not take
+        // write locks on existing Invite rows: consumption locks Invite then
+        // RoomRole, so taking them in the reverse order here would create a
+        // deadlock path. Expired/fully-used rows are ignored when calculating
+        // reservations and are normalized later by list/resolve.
         RoomRole role = roomRoleRepository.findByIdForUpdate(roomRoleId)
                 .orElseThrow(() -> new IllegalArgumentException("No RoomRole with id " + roomRoleId));
         if (!role.getRoom().getId().equals(roomId)) {
@@ -63,11 +68,9 @@ public class InviteService {
 
         Instant now = Instant.now();
         List<Invite> existing = inviteRepository.findByRoomRoleId(roomRoleId);
-        existing.forEach(invite -> refreshStatus(invite, now));
-
         long activeMembers = assignmentRepository.countByRoomRoleIdAndRevokedAtIsNull(roomRoleId);
         long reservedUses = existing.stream()
-                .filter(invite -> invite.getStatus() == Invite.Status.PENDING)
+                .filter(invite -> reservesCapacity(invite, now))
                 .mapToLong(invite -> Math.max(0, invite.getMaxUses() - invite.getUsesCount()))
                 .sum();
 
@@ -143,7 +146,8 @@ public class InviteService {
     @Transactional
     public Invite expire(UUID roomId, UUID inviteId) {
         requireHost(roomId);
-        Invite invite = inviteRepository.findById(inviteId)
+        // Serialize host cancellation with a guest consuming the same token.
+        Invite invite = inviteRepository.findByIdForUpdate(inviteId)
                 .orElseThrow(() -> new IllegalArgumentException("No Invite with id " + inviteId));
         if (!invite.getRoomRole().getRoom().getId().equals(roomId)) {
             throw new IllegalStateException("Invite does not belong to this room");
@@ -176,6 +180,12 @@ public class InviteService {
         if (!assignment.getRoomRole().isHostRole()) {
             throw new IllegalStateException("Only the room host can manage invites");
         }
+    }
+
+    private boolean reservesCapacity(Invite invite, Instant now) {
+        if (invite.getStatus() != Invite.Status.PENDING) return false;
+        if (invite.getUsesCount() >= invite.getMaxUses()) return false;
+        return invite.getExpiresAt() == null || invite.getExpiresAt().isAfter(now);
     }
 
     private void refreshStatus(Invite invite, Instant now) {
