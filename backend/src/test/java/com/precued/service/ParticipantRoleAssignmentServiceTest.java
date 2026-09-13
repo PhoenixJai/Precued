@@ -116,6 +116,28 @@ class ParticipantRoleAssignmentServiceTest {
     }
 
     @Test
+    void assign_hostRoleAtCapacity_isRejected() {
+        service = new ParticipantRoleAssignmentService(
+                assignmentRepository, roomParticipantRepository, roomRoleRepository, engine);
+
+        User user = new User();
+        user.setId(UUID.randomUUID());
+        RoomParticipant host = participantWithUser(user);
+        when(roomParticipantRepository.findById(participantId)).thenReturn(Optional.of(host));
+        RoomRole hostRole = roleInRoom(true);
+        hostRole.setMaxMembers(1);
+        when(roomRoleRepository.findById(roleId)).thenReturn(Optional.of(hostRole));
+        when(assignmentRepository.countByRoomRoleIdAndRevokedAtIsNull(roleId)).thenReturn(1L);
+
+        assertThatThrownBy(() -> service.assign(participantId, roleId))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("capacity");
+
+        verify(assignmentRepository, never()).save(any());
+        verify(engine, never()).recomputeAndPushForRoom(any());
+    }
+
+    @Test
     void assign_nonHostRoleDirectly_isRejected_guestMustUseInviteJoin() {
         service = new ParticipantRoleAssignmentService(
                 assignmentRepository, roomParticipantRepository, roomRoleRepository, engine);
