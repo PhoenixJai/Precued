@@ -64,16 +64,15 @@ public class RoomService {
     }
 
     /**
-     * Creates the runtime snapshot for a Template. TemplateRoles become
-     * RoomRoles, and configured TemplateStages/TemplateStageRoles become
-     * RoomStages/RoomStageRoles. All RoomStages begin PENDING; starting and
-     * advancing the flow is deliberately a separate runtime-state-machine
-     * concern.
+     * Creates the runtime snapshot for a Template. Template name/roles and
+     * configured TemplateStages/TemplateStageRoles are copied onto the Room
+     * so later Template edits cannot mutate an existing session.
      *
      * Session Flow configuration is copied even when the Template's flow is
      * disabled. The enabled flag is snapshotted separately onto Room, so a
      * disabled Room can retain the saved stage configuration without using
-     * it. Later Template edits therefore cannot mutate an existing Room.
+     * it. All RoomStages begin PENDING; starting/advancing is a separate
+     * runtime-state-machine concern.
      *
      * Built-in Templates (createdBy == null) remain launchable by any
      * authenticated account holder. Custom Templates are private-by-default
@@ -95,6 +94,7 @@ public class RoomService {
 
         Room room = new Room();
         room.setTemplate(template);
+        room.setTemplateName(template.getName());
         room.setCreatedBy(createdBy);
         room.setLivekitRoomName("room-" + UUID.randomUUID());
         room.setStatus(Room.Status.CREATED);
