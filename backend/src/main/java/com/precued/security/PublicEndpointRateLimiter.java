@@ -9,7 +9,9 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * Minimum application-level abuse protection for Precued's public entry points.
@@ -29,8 +31,8 @@ public class PublicEndpointRateLimiter {
     private static final Policy LOGIN = new Policy("login", 10, Duration.ofMinutes(5));
     private static final Policy SIGNUP = new Policy("signup", 5, Duration.ofMinutes(10));
     private static final Policy MAGIC_LINK = new Policy("magic-link", 3, Duration.ofMinutes(15));
-    private static final Policy VERIFY = new Policy("verify", 30, Duration.ofMinutes(5));
-    private static final Policy ROOM_JOIN = new Policy("room-join", 30, Duration.ofMinutes(1));
+    private static final Policy VERIFY = new Policy("verification", 30, Duration.ofMinutes(5));
+    private static final Policy ROOM_JOIN = new Policy("room join", 30, Duration.ofMinutes(1));
 
     private static final long CLEANUP_EVERY_REQUESTS = 256;
 
@@ -68,45 +70,40 @@ public class PublicEndpointRateLimiter {
 
     private void check(Policy policy, String subject) {
         Instant now = clock.instant();
-        String key = policy.name() + ":" + subject;
+        String key = policy.label() + ":" + subject;
+        AtomicBoolean rejected = new AtomicBoolean(false);
+        AtomicReference<Instant> resetAt = new AtomicReference<>();
 
-        Window result = windows.compute(key, (ignored, existing) -> {
+        windows.compute(key, (ignored, existing) -> {
             if (existing == null || !now.isBefore(existing.resetAt())) {
-                return new Window(1, now.plus(policy.window()));
+                Window created = new Window(1, now.plus(policy.window()));
+                resetAt.set(created.resetAt());
+                return created;
             }
+
+            resetAt.set(existing.resetAt());
             if (existing.count() >= policy.limit()) {
+                rejected.set(true);
                 return existing;
             }
+
             return new Window(existing.count() + 1, existing.resetAt());
         });
 
-        if (result.count() >= policy.limit() && windows.computeIfPresent(key, (ignored, current) -> current) == result) {
-            // A count exactly equal to the limit is still allowed; reject only
-            // when the call arrived after the window was already full.
-            // Detect that condition by checking whether this request could
-            // increment the stored count. The second read above is identity-
-            // stable because Window is immutable and compute is atomic per key.
-            Window current = windows.get(key);
-            if (current == result && current.count() == policy.limit()) {
-                // We need to distinguish the request that reached the limit
-                // from the one after it. Store one sentinel step beyond the
-                // limit only for the rejected request.
-                boolean rejected = windows.replace(key, result, new Window(policy.limit() + 1, result.resetAt()));
-                if (rejected) {
-                    long retryAfter = Math.max(1, Duration.between(now, result.resetAt()).toSeconds());
-                    throw new RateLimitExceededException("Too many " + policy.label() + " attempts", retryAfter);
-                }
-            }
-        }
-
-        if (result.count() > policy.limit()) {
-            long retryAfter = Math.max(1, Duration.between(now, result.resetAt()).toSeconds());
-            throw new RateLimitExceededException("Too many " + policy.label() + " attempts", retryAfter);
+        if (rejected.get()) {
+            throw new RateLimitExceededException(
+                    "Too many " + policy.label() + " attempts",
+                    retryAfterSeconds(now, resetAt.get()));
         }
 
         if (requestCounter.incrementAndGet() % CLEANUP_EVERY_REQUESTS == 0) {
             windows.entrySet().removeIf(entry -> !now.isBefore(entry.getValue().resetAt()));
         }
+    }
+
+    private long retryAfterSeconds(Instant now, Instant resetAt) {
+        long millis = Math.max(1, Duration.between(now, resetAt).toMillis());
+        return Math.max(1, (millis + 999) / 1000);
     }
 
     private String normalizeEmail(String email) {
@@ -120,11 +117,7 @@ public class PublicEndpointRateLimiter {
         return clientAddress.trim();
     }
 
-    private record Policy(String name, int limit, Duration window) {
-        String label() {
-            return name.replace('-', ' ');
-        }
-    }
+    private record Policy(String label, int limit, Duration window) {}
 
     private record Window(int count, Instant resetAt) {}
 }
