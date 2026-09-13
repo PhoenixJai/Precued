@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { api } from "../lib/api";
+import { sessionFlowToggleText } from "../lib/sessionFlowToggle";
 import {
   cloneStageDraft,
   moveStage,
@@ -168,21 +169,28 @@ export function TemplateSessionFlowBuilder(props: {
             <p>Define the ordered stages participants move through during this template.</p>
           </div>
         </div>
-        <label className="flow-enabled-toggle">
+        <label className="flow-switch-control">
           <input
+            className="flow-switch-input"
             type="checkbox"
+            role="switch"
+            aria-label="Turn Session Flow on or off"
+            aria-checked={enabled}
             checked={enabled}
             disabled={!loaded || saving}
             onChange={(event) => { setEnabled(event.target.checked); setSavedNotice(false); }}
           />
-          <span>{enabled ? "Enabled" : "Disabled"}</span>
+          <span className="flow-switch-track" aria-hidden="true">
+            <span className="flow-switch-thumb" />
+          </span>
+          <span className="flow-switch-state">{sessionFlowToggleText(enabled)}</span>
         </label>
       </div>
 
       <p className={`flow-builder-note${enabled ? "" : " flow-builder-note-warning"}`}>
         {enabled
           ? "New rooms snapshot this Session Flow when they are created. Existing rooms keep their original snapshot."
-          : "Stages can stay saved while Session Flow is disabled, but they will not appear in live calls. Enable Session Flow, save it, then create a new room to use the stages."}
+          : "Stages can stay saved while Session Flow is off, but they will not appear in live calls. Turn Session Flow on, save it, then create a new room to use the stages."}
       </p>
 
       {!loaded ? (
