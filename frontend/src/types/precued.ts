@@ -9,6 +9,13 @@ export type RoomStatus = "CREATED" | "ACTIVE" | "ENDED";
 export type AccessLevel = "HOST" | "MEMBER";
 export type ShareStatus = "ACTIVE" | "ENDED";
 export type ShareKind = "SCREEN" | "PRESENTATION";
+export type SessionFlowStatus =
+  | "DISABLED"
+  | "NOT_CONFIGURED"
+  | "NOT_STARTED"
+  | "IN_PROGRESS"
+  | "COMPLETED";
+export type SessionFlowStageStatus = "PENDING" | "ACTIVE" | "COMPLETED";
 
 export interface MagicLinkResponse {
   expiresAt: string;
@@ -72,6 +79,28 @@ export interface ParticipantRoleAssignment {
   roomRoleId: string;
   assignedAt: string;
   revokedAt: string | null;
+}
+
+/** Runtime RoomStage snapshot returned by the Session Flow API. */
+export interface SessionFlowStage {
+  id: string;
+  stageKey: string;
+  name: string;
+  sortOrder: number;
+  durationSeconds: number | null;
+  status: SessionFlowStageStatus;
+  startedAt: string | null;
+  completedAt: string | null;
+  roomRoleIds: string[];
+}
+
+/** Derived runtime flow state; there is intentionally no separate persisted flow-status field. */
+export interface SessionFlow {
+  roomId: string;
+  enabled: boolean;
+  status: SessionFlowStatus;
+  currentStageId: string | null;
+  stages: SessionFlowStage[];
 }
 
 /**
