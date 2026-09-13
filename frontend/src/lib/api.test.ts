@@ -69,6 +69,47 @@ describe("request() 401 handling", () => {
   });
 });
 
+describe("request authentication routing", () => {
+  let storage: Storage;
+  let fetchMock: ReturnType<typeof vi.fn>;
+
+  beforeEach(() => {
+    storage = createFakeStorage();
+    vi.stubGlobal("sessionStorage", storage);
+    fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => [],
+    });
+    vi.stubGlobal("fetch", fetchMock);
+  });
+
+  it("does not send a RoomParticipant bearer token when reading public built-in presets", async () => {
+    // Regression for the production Start Call failure: CallPage polls
+    // /api/templates/{templateId}/presets after connecting. That route is
+    // public, but AuthSessionInterceptor treats ANY supplied bearer token
+    // under /api/templates/** as an Account/AuthSession token. Sending the
+    // RoomParticipant token here therefore turns a healthy call into a 401
+    // and the frontend misleadingly reports "session expired".
+    storage.setItem("precued.participant", JSON.stringify({ sessionToken: "participant-token" }));
+    storage.setItem("precued.auth", JSON.stringify({ sessionToken: "account-token" }));
+
+    await api.getPresets("mock_trial");
+
+    const [, init] = fetchMock.mock.calls[0];
+    expect(init.headers).not.toHaveProperty("Authorization");
+  });
+
+  it("still sends the RoomParticipant bearer token on protected room requests", async () => {
+    storage.setItem("precued.participant", JSON.stringify({ sessionToken: "participant-token" }));
+
+    await api.getRoom("room-1");
+
+    const [, init] = fetchMock.mock.calls[0];
+    expect(init.headers).toMatchObject({ Authorization: "Bearer participant-token" });
+  });
+});
+
 describe("describeSlideImageError", () => {
   it("gives a distinct, honest message for a missing slide image (404)", () => {
     // Matches a real incident: an upload's R2 write reported success but the
