@@ -39,6 +39,9 @@ public class WebMvcConfig implements WebMvcConfigurer {
                         // these two instead, with User-identity semantics.
                         "/api/rooms",
                         "/api/room-participants",
+                        // A guest must be able to resolve their opaque Invite
+                        // before a RoomParticipant/session token exists.
+                        "/api/invites/*",
                         // Called before the host/guest has joined (to resolve
                         // which RoomRole to self-assign) — not sensitive enough
                         // to justify breaking that ordering.
