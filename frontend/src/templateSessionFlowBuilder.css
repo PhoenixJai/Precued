@@ -1,0 +1,216 @@
+.session-flow-builder-card {
+  margin-top: 24px;
+  padding: 24px;
+}
+
+.session-flow-builder-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+}
+
+.flow-enabled-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  border: 1px solid #dce3ef;
+  background: #f8faff;
+  border-radius: 999px;
+  padding: 9px 13px;
+  font-size: 13px;
+  font-weight: 700;
+  color: #34435f;
+}
+
+.flow-enabled-toggle input {
+  width: 17px;
+  height: 17px;
+}
+
+.flow-builder-note {
+  margin: 16px 0 18px;
+  padding: 11px 13px;
+  border-radius: 9px;
+  background: #f4f7ff;
+  color: #60708c;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.flow-stage-list {
+  display: grid;
+  gap: 14px;
+}
+
+.flow-stage-editor {
+  border: 1px solid #e1e6ef;
+  border-radius: 12px;
+  padding: 17px;
+  background: #fff;
+}
+
+.flow-stage-editor-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 15px;
+}
+
+.flow-stage-editor-top strong,
+.flow-stage-editor-top small {
+  display: block;
+}
+
+.flow-stage-editor-top strong {
+  color: #1d2b48;
+  font-size: 14px;
+}
+
+.flow-stage-editor-top small {
+  color: #8a93a6;
+  font-size: 11px;
+  margin-top: 3px;
+}
+
+.flow-stage-order-actions {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.flow-stage-order-actions .compact {
+  min-width: 36px;
+  padding: 0 10px;
+}
+
+.flow-remove-stage {
+  margin-left: 4px;
+  color: #b33b4b;
+}
+
+.flow-stage-fields {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(180px, 1fr);
+  gap: 14px;
+}
+
+.flow-stage-fields label {
+  display: grid;
+  gap: 7px;
+  font-size: 12px;
+  font-weight: 700;
+  color: #34415c;
+}
+
+.flow-stage-fields label span {
+  color: #8a92a3;
+  font-weight: 500;
+}
+
+.flow-stage-fields input,
+.flow-add-stage-row input {
+  width: 100%;
+  min-height: 40px;
+  border: 1px solid #d8deea;
+  border-radius: 8px;
+  padding: 0 12px;
+  color: #1f2940;
+  outline: none;
+  background: #fff;
+}
+
+.flow-stage-fields input:focus,
+.flow-add-stage-row input:focus {
+  border-color: #6d8cf5;
+  box-shadow: 0 0 0 3px rgba(109, 140, 245, .12);
+}
+
+.flow-role-picker {
+  margin-top: 15px;
+}
+
+.flow-role-picker > strong {
+  display: block;
+  margin-bottom: 9px;
+  font-size: 12px;
+  color: #34415c;
+}
+
+.flow-role-picker > small {
+  color: #8a92a3;
+  font-size: 12px;
+}
+
+.flow-role-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.flow-role-option {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  border: 1px solid #dfe4ed;
+  border-radius: 999px;
+  padding: 7px 10px;
+  background: #fafbfe;
+  color: #3c4963;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.flow-role-option input {
+  margin: 0;
+}
+
+.flow-add-stage-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 10px;
+  margin-top: 16px;
+}
+
+.flow-empty-note {
+  margin-top: 14px;
+}
+
+.flow-save-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 14px;
+  margin-top: 18px;
+  padding-top: 16px;
+  border-top: 1px solid #e7eaf0;
+}
+
+.flow-saved-notice {
+  color: #27824c;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+@media (max-width: 760px) {
+  .session-flow-builder-header,
+  .flow-stage-editor-top,
+  .flow-save-row {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .flow-enabled-toggle {
+    align-self: flex-start;
+  }
+
+  .flow-stage-fields,
+  .flow-add-stage-row {
+    grid-template-columns: 1fr;
+  }
+
+  .flow-stage-order-actions {
+    flex-wrap: wrap;
+  }
+}
