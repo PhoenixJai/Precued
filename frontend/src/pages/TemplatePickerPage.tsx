@@ -1,11 +1,16 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { AppShell } from "../components/AppShell";
 import { api } from "../lib/api";
+import {
+  customTemplateLaunchCards,
+  hasHostRole,
+  roomTemplateTitle,
+  type CustomTemplateLaunchCard,
+} from "../lib/customTemplateLaunch";
 import { findHostRole } from "../lib/roleSetup";
 import { getAuthSession, saveParticipant } from "../lib/session";
-import { templateName } from "../lib/templates";
-import type { TemplateId } from "../types/precued";
+import type { TemplateRoleDefinition } from "../types/precued";
 
 const templateCards = [
   {
@@ -14,7 +19,6 @@ const templateCards = [
     description: "Control what internal and external participants can see in real time.",
     roles: ["Sales Rep", "Sales Engineer", "Client"],
     bullets: ["Role-based content visibility", "Built-in collaboration tools", "Optimized for client conversations"],
-    functional: true,
     badge: "POPULAR",
   },
   {
@@ -23,7 +27,6 @@ const templateCards = [
     description: "Structure a realistic trial experience with controlled visibility for each role.",
     roles: ["Judge", "Jury", "Defense", "Prosecution"],
     bullets: ["Role-specific information access", "Support for exhibits and evidence", "Designed for legal teams and education"],
-    functional: true,
     badge: undefined,
   },
   {
@@ -32,30 +35,72 @@ const templateCards = [
     description: "Facilitate structured academic debates with role-based visibility.",
     roles: ["Judge", "Affirmative", "Negative", "Audience"],
     bullets: ["Separate materials for each side", "Timed rounds and structure", "Ideal for education and competitions"],
-    functional: true,
     badge: undefined,
   },
 ] as const;
 
 export default function TemplatePickerPage() {
   const navigate = useNavigate();
-  const [loading, setLoading] = useState(false);
+  const [creatingTemplateId, setCreatingTemplateId] = useState<string | null>(null);
+  const [customTemplates, setCustomTemplates] = useState<CustomTemplateLaunchCard[]>([]);
+  const [customRoles, setCustomRoles] = useState<Record<string, TemplateRoleDefinition[]>>({});
+  const [customTemplatesLoaded, setCustomTemplatesLoaded] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  async function createAndJoinRoom(templateId: TemplateId) {
+  useEffect(() => {
+    const auth = getAuthSession();
+    if (!auth) return;
+    let cancelled = false;
+
+    async function loadCustomTemplates() {
+      try {
+        const summaries = await api.listMyTemplates(auth.sessionToken);
+        const cards = customTemplateLaunchCards(summaries);
+        const roleEntries = await Promise.all(
+          cards.map(async (card) => [card.id, await api.getTemplateRoles(card.id, auth.sessionToken)] as const),
+        );
+        if (cancelled) return;
+        setCustomTemplates(cards);
+        setCustomRoles(Object.fromEntries(roleEntries));
+        setCustomTemplatesLoaded(true);
+      } catch (err) {
+        if (!cancelled) {
+          setCustomTemplatesLoaded(true);
+          setError(err instanceof Error ? err.message : "Unable to load your custom templates");
+        }
+      }
+    }
+
+    void loadCustomTemplates();
+    return () => { cancelled = true; };
+  }, []);
+
+  async function createAndJoinRoom(templateId: string, displayName: string, isCustom = false) {
     const auth = getAuthSession();
     if (!auth) {
       navigate("/login");
       return;
     }
 
-    setLoading(true);
+    setCreatingTemplateId(templateId);
     setError(null);
     try {
+      // Custom templates are user-authored and can legitimately be unfinished.
+      // Check for a host before creating the Room so a half-built template does
+      // not leave behind an orphan Room that nobody can host.
+      if (isCustom) {
+        const sourceRoles = await api.getTemplateRoles(templateId, auth.sessionToken);
+        if (!hasHostRole(sourceRoles)) {
+          throw new Error(`Add a host role to ${displayName} before starting a room.`);
+        }
+      }
+
       const room = await api.createRoom(templateId, auth.sessionToken);
       const roles = await api.getRoomRoles(room.id);
       const hostRole = findHostRole(roles);
-      if (!hostRole) throw new Error(`No host role was created for this ${templateName(templateId)} room.`);
+      if (!hostRole) {
+        throw new Error(`No host role was created for this ${roomTemplateTitle(templateId, displayName)} room.`);
+      }
 
       const participant = await api.joinRoom(room.id, auth.displayName, auth.userId, auth.sessionToken);
       // Save before assignRole: that call requires the session this join
@@ -78,9 +123,11 @@ export default function TemplatePickerPage() {
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to create room");
     } finally {
-      setLoading(false);
+      setCreatingTemplateId(null);
     }
   }
+
+  const creating = creatingTemplateId !== null;
 
   return (
     <AppShell>
@@ -109,21 +156,70 @@ export default function TemplatePickerPage() {
                 {template.bullets.map((bullet) => <li key={bullet}>✓ {bullet}</li>)}
               </ul>
               <button
-                className={template.functional ? "primary-button wide" : "secondary-button wide"}
-                onClick={template.functional ? () => createAndJoinRoom(template.id) : undefined}
-                disabled={!template.functional || loading}
+                className="primary-button wide"
+                onClick={() => createAndJoinRoom(template.id, template.title)}
+                disabled={creating}
               >
-                {template.functional ? (loading ? "Creating room..." : "Use template  →") : "Coming soon"}
+                {creatingTemplateId === template.id ? "Creating room..." : "Use template  →"}
               </button>
             </article>
           ))}
+
+          {customTemplates.map((template) => {
+            const roles = customRoles[template.id];
+            const launchReady = Boolean(roles && hasHostRole(roles));
+            return (
+              <article key={template.id} className="surface-card template-card custom-card">
+                <div className="template-card-top">
+                  <div className="icon-tile large">✦</div>
+                  <div className="template-title-block">
+                    <h2>{template.title}</h2>
+                    <p>{template.description}</p>
+                  </div>
+                  <span className="coming-badge">YOUR TEMPLATE</span>
+                </div>
+                <div className="role-pills">
+                  {!roles ? (
+                    <span className="role-pill">Loading roles…</span>
+                  ) : roles.length === 0 ? (
+                    <span className="role-pill">No roles yet</span>
+                  ) : (
+                    roles.map((role, roleIndex) => (
+                      <span key={role.id} className={`role-pill role-${roleIndex % 4}`}>♙ {role.name}</span>
+                    ))
+                  )}
+                </div>
+                <div className="template-divider" />
+                <ul className="feature-list">
+                  <li>✓ Uses your custom role configuration</li>
+                  <li>✓ Private to your account</li>
+                  <li>{launchReady ? "✓ Ready to launch" : "• Add a host role before launching"}</li>
+                </ul>
+                <button
+                  className="primary-button wide"
+                  disabled={creating || !launchReady}
+                  onClick={() => createAndJoinRoom(template.id, template.title, true)}
+                >
+                  {creatingTemplateId === template.id ? "Creating room..." : "Use template  →"}
+                </button>
+                <button
+                  className="secondary-button wide"
+                  style={{ marginTop: 8 }}
+                  disabled={creating}
+                  onClick={() => navigate(`/templates/custom/${template.id}`)}
+                >
+                  Edit template
+                </button>
+              </article>
+            );
+          })}
 
           <article className="surface-card template-card custom-card">
             <div className="template-card-top">
               <div className="icon-tile large">✦</div>
               <div className="template-title-block">
-                <h2>Custom Template</h2>
-                <p>Build your own template with the roles your session needs.</p>
+                <h2>Build a Custom Template</h2>
+                <p>Create another reusable template with the roles your session needs.</p>
               </div>
             </div>
             <div className="template-divider" />
@@ -132,11 +228,14 @@ export default function TemplatePickerPage() {
               <li>✓ Define your own host and guest roles</li>
               <li>✓ Private to your account</li>
             </ul>
-            <button className="secondary-button wide" onClick={() => navigate("/templates/custom/new")}>
+            <button className="secondary-button wide" disabled={creating} onClick={() => navigate("/templates/custom/new")}>
               ✦ Build a custom template
             </button>
           </article>
         </div>
+        {customTemplatesLoaded && customTemplates.length === 0 && !error && (
+          <p className="empty-state-note centered">You haven't created a custom template yet.</p>
+        )}
         {error && <div className="error-banner">{error}</div>}
       </section>
     </AppShell>
