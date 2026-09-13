@@ -13,6 +13,16 @@ import type { TemplateRoleDefinition, TemplateSummary } from "../types/precued";
  * still only creates rooms from the three built-in templates) and no
  * visibility-permission-matrix editing, both explicitly out of scope for
  * this milestone's first chunk.
+ *
+ * Every add/remove role action below persists immediately (see
+ * addRole/removeRole) — there's no local-only draft state and nothing
+ * separate to "save." The "Done" button is a navigation action, not a
+ * data-committing one; it exists so there's a clear way back to Profile's
+ * "Your templates" (ownership already works via Template.createdBy, set
+ * at creation in TemplateService#createCustomTemplate — this does not
+ * depend on the Auth & Account Overhaul's Step 3 owner_user_id/is_builtin/
+ * visibility migration, which is a column rename/addition for a different,
+ * not-yet-built concern: public template sharing).
  */
 export default function CustomTemplateBuilderPage() {
   const navigate = useNavigate();
@@ -21,7 +31,12 @@ export default function CustomTemplateBuilderPage() {
 
   useEffect(() => {
     if (!auth) navigate("/login");
-  }, [auth, navigate]);
+    // getAuthSession() re-parses sessionStorage into a new object every
+    // call, so it's never referentially stable across renders — depend on
+    // the token itself (matches CallPage/RoomSetupPage's me?.id convention
+    // for the same reason with getParticipant()).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [auth?.sessionToken, navigate]);
 
   if (!auth) return null;
 
@@ -170,6 +185,15 @@ function RoleBuilder({ templateId, authSessionToken }: { templateId: string; aut
                 </div>
               </div>
             ))}
+
+            {/* Every add/remove above already persists immediately (see
+                addRole/removeRole) — this isn't a "save" in the sense of
+                committing unsaved data, it's the terminal action that
+                actually gets the user back to where the template they just
+                built is visible (Profile's "Your templates"). */}
+            <button className="primary-button wide finish-template-button" onClick={() => navigate("/profile")}>
+              Done — go to your profile  →
+            </button>
           </div>
 
           <aside className="surface-card readiness-card">

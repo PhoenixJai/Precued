@@ -14,6 +14,7 @@ import { ConnectionState, RoomEvent, Track } from "livekit-client";
 import type { DataPacket_Kind, RemoteParticipant } from "livekit-client";
 import { AppShell, Brand } from "../components/AppShell";
 import { api, describeSlideImageError } from "../lib/api";
+import { initials } from "../lib/initials";
 import {
   clearShareGrantIds,
   forgetGrantId,
@@ -884,8 +885,4 @@ function formatRoleNames(names: string[]) {
   if (names.length === 1) return names[0];
   if (names.length === 2) return `${names[0]} and ${names[1]}`;
   return `${names.slice(0, -1).join(", ")}, and ${names[names.length - 1]}`;
-}
-
-function initials(name: string) {
-  return name.split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]?.toUpperCase()).join("");
 }
