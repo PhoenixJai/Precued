@@ -22,21 +22,11 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
 import java.io.IOException;
 
 /**
- * Precued_Issues_Update_3.md, M-Auth item 2: "no valid session -> 401" as a
- * framework-level guarantee on every write endpoint, rather than something
- * that only holds if every controller happens to be covered by an
- * interceptor someone remembered to register. See
- * RoomParticipantAuthenticationFilter's Javadoc for how this coexists with
- * (not replaces) ParticipantSessionInterceptor's ownership checks and
- * AuthSessionInterceptor's separate User/AuthSession token space, both
- * unchanged.
- *
- * The permitAll list below is ported verbatim from WebMvcConfig's existing
- * addInterceptors().excludePathPatterns — same 5 patterns, same reasons
- * documented there. This list must never drift from that one: anything
- * missed here silently 401s a path that has always been public; anything
- * added here that isn't also excluded there would be redundant, not wrong,
- * but the two should be read side by side, not maintained independently.
+ * Framework-level session enforcement for protected API routes. Public
+ * entry points must stay aligned with WebMvcConfig's interceptor exclusions;
+ * a guest can resolve an opaque Invite token before a RoomParticipant exists,
+ * while host invite management under /api/rooms/{roomId}/invites remains
+ * participant-authenticated.
  */
 @Configuration
 public class SecurityConfig {
@@ -53,16 +43,11 @@ public class SecurityConfig {
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         http.csrf(AbstractHttpConfigurer::disable)
-                // WebMvcConfig.addCorsMappings already owns CORS entirely at
-                // the MVC layer (PR #82) — deliberately not touching it here.
                 .cors(AbstractHttpConfigurer::disable)
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
-                        // A CORS preflight carries no Authorization header by
-                        // design — this is the exact PR #83 incident
-                        // (interceptor-level 401 on OPTIONS) one layer down;
-                        // this rule exists specifically to not repeat it.
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/invites/*").permitAll()
                         .requestMatchers(
                                 "/api/auth/**",
                                 "/api/templates/**",
