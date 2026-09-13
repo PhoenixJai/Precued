@@ -9,6 +9,7 @@ import com.precued.repository.RoomParticipantRepository;
 import com.precued.repository.RoomRoleRepository;
 import com.precued.security.CurrentParticipantContext;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
 import java.util.UUID;
@@ -57,11 +58,15 @@ public class ParticipantRoleAssignmentService {
     }
 
     /** Account Holder host bootstrap only. Guest roles are assigned by InviteJoinService. */
+    @Transactional
     public ParticipantRoleAssignment assign(UUID roomParticipantId, UUID roomRoleId) {
         RoomParticipant participant = roomParticipantRepository.findById(roomParticipantId)
                 .orElseThrow(() -> new IllegalArgumentException(
                         "No RoomParticipant with id " + roomParticipantId));
-        RoomRole role = roomRoleRepository.findById(roomRoleId)
+        // The same RoomRole lock used by InviteService/InviteJoinService makes
+        // maxMembers a real concurrent invariant rather than a best-effort
+        // pre-check.
+        RoomRole role = roomRoleRepository.findByIdForUpdate(roomRoleId)
                 .orElseThrow(() -> new IllegalArgumentException("No RoomRole with id " + roomRoleId));
 
         if (!CurrentParticipantContext.get().getId().equals(roomParticipantId)) {
