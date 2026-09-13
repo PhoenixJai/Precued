@@ -117,7 +117,7 @@ export default function RoomSetupPage() {
     const requestedUses = role.maxMembers === null
       ? Number(poolUses[role.id] ?? "")
       : undefined;
-    if (role.maxMembers === null && (!Number.isInteger(requestedUses) || requestedUses <= 0)) {
+    if (role.maxMembers === null && (typeof requestedUses !== "number" || !Number.isInteger(requestedUses) || requestedUses <= 0)) {
       setError(`Enter how many times the ${role.name} shared link may be used.`);
       return;
     }
