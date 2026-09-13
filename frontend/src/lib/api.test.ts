@@ -110,6 +110,27 @@ describe("request authentication routing", () => {
   });
 });
 
+describe("expireRoomInvite", () => {
+  it("sends a DELETE to the invite's own URL, matching RoomInviteController's @DeleteMapping", async () => {
+    // Live regression: the host's Cancel button on an invite record was
+    // failing with "failed to fetch" — this called POST .../invites/{id}/expire,
+    // but RoomInviteController only maps DELETE /api/rooms/{roomId}/invites/{inviteId}.
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({ id: "invite-1", status: "EXPIRED" }),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    vi.stubGlobal("sessionStorage", createFakeStorage());
+
+    await api.expireRoomInvite("room-1", "invite-1");
+
+    const [url, init] = fetchMock.mock.calls[0];
+    expect(url).toBe("/api/rooms/room-1/invites/invite-1");
+    expect(init.method).toBe("DELETE");
+  });
+});
+
 describe("describeSlideImageError", () => {
   it("gives a distinct, honest message for a missing slide image (404)", () => {
     // Matches a real incident: an upload's R2 write reported success but the
