@@ -14,6 +14,8 @@ import type {
   ShareSlide,
   TemplateId,
   TemplatePreset,
+  TemplateRoleDefinition,
+  TemplateSummary,
 } from "../types/precued";
 import { clearSession, getParticipant } from "./session";
 
@@ -192,6 +194,56 @@ export const api = {
 
   getPresets(templateId: TemplateId) {
     return request<TemplatePreset[]>(`/api/templates/${templateId}/presets`);
+  },
+
+  /**
+   * M-Templates custom role builder. authSessionToken (from getAuthSession())
+   * is required here the same way it is for createRoom — TemplateService
+   * derives ownership from it, never from a body field.
+   */
+  createTemplate(name: string, authSessionToken: string) {
+    return request<TemplateSummary>("/api/templates", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${authSessionToken}` },
+      body: JSON.stringify({ name }),
+    });
+  },
+
+  listMyTemplates(authSessionToken: string) {
+    return request<TemplateSummary[]>("/api/templates/mine", {
+      headers: { Authorization: `Bearer ${authSessionToken}` },
+    });
+  },
+
+  getTemplate(templateId: string, authSessionToken: string) {
+    return request<TemplateSummary>(`/api/templates/${templateId}`, {
+      headers: { Authorization: `Bearer ${authSessionToken}` },
+    });
+  },
+
+  getTemplateRoles(templateId: string, authSessionToken: string) {
+    return request<TemplateRoleDefinition[]>(`/api/templates/${templateId}/roles`, {
+      headers: { Authorization: `Bearer ${authSessionToken}` },
+    });
+  },
+
+  addTemplateRole(
+    templateId: string,
+    role: { roleKey: string; name: string; isHostRole: boolean; isGuestRole: boolean; maxMembers: number | null },
+    authSessionToken: string,
+  ) {
+    return request<TemplateRoleDefinition>(`/api/templates/${templateId}/roles`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${authSessionToken}` },
+      body: JSON.stringify(role),
+    });
+  },
+
+  removeTemplateRole(templateId: string, roleId: string, authSessionToken: string) {
+    return request<void>(`/api/templates/${templateId}/roles/${roleId}`, {
+      method: "DELETE",
+      headers: { Authorization: `Bearer ${authSessionToken}` },
+    });
   },
 
   getActiveShares(roomId: string) {

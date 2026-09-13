@@ -44,12 +44,19 @@ public class WebMvcConfig implements WebMvcConfigurer {
                         // to justify breaking that ordering.
                         "/api/rooms/*/room-roles");
 
-        // Exactly the two paths excluded above: createdByUserId/userId in
+        // /api/rooms, /api/room-participants: createdByUserId/userId in
         // their request bodies must come from a verified AuthSession, never
         // an unverified body claim — see AuthSessionInterceptor's own
         // Javadoc for how the two paths differ (required vs. optional).
+        // /api/templates/**: M-Templates' custom template ownership — a
+        // *different* kind of optional-unless-the-service-needs-it path,
+        // same reasoning as room-participants: GET .../presets and reading
+        // a built-in template need no token at all, so this only resolves
+        // one *if* present; TemplateService is what actually requires one
+        // for create/add-role/list-mine, exactly like RoomParticipantService
+        // does for a non-guest join.
         registry.addInterceptor(authSessionInterceptor)
-                .addPathPatterns("/api/rooms", "/api/room-participants");
+                .addPathPatterns("/api/rooms", "/api/room-participants", "/api/templates/**");
     }
 
     // Bearer tokens are sent in an Authorization header, never a cookie, so

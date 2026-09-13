@@ -119,22 +119,23 @@ export default function TemplatePickerPage() {
             </article>
           ))}
 
-          <article className="surface-card template-card custom-card disabled-card">
+          <article className="surface-card template-card custom-card">
             <div className="template-card-top">
               <div className="icon-tile large">✦</div>
               <div className="template-title-block">
                 <h2>Custom Template</h2>
-                <p>Create your own template with custom roles, permissions, and workflows.</p>
+                <p>Build your own template with the roles your session needs.</p>
               </div>
-              <span className="coming-badge">Coming Soon</span>
             </div>
             <div className="template-divider" />
             <ul className="feature-list">
               <li>✓ Fully customizable roles</li>
-              <li>✓ Flexible permission settings</li>
-              <li>✓ Save and reuse for your team</li>
+              <li>✓ Define your own host and guest roles</li>
+              <li>✓ Private to your account</li>
             </ul>
-            <button className="secondary-button wide" disabled>▣ Coming soon</button>
+            <button className="secondary-button wide" onClick={() => navigate("/templates/custom/new")}>
+              ✦ Build a custom template
+            </button>
           </article>
         </div>
         {error && <div className="error-banner">{error}</div>}

@@ -4,6 +4,7 @@ import com.precued.controller.TemplateController;
 import com.precued.repository.AuthSessionRepository;
 import com.precued.repository.RoomParticipantRepository;
 import com.precued.service.TemplatePresetService;
+import com.precued.service.TemplateService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
@@ -37,6 +38,7 @@ class WebMvcConfigCorsTest {
 
     @Autowired private MockMvc mockMvc;
     @MockBean private TemplatePresetService templatePresetService;
+    @MockBean private TemplateService templateService;
     @MockBean private RoomParticipantRepository roomParticipantRepository;
     @MockBean private AuthSessionRepository authSessionRepository;
 
