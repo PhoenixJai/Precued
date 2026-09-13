@@ -31,6 +31,10 @@ public class Template {
     @JoinColumn(name = "created_by_user_id")
     private User createdBy;
 
+    /** Optional structured stage progression. Saved stages may exist even while this is false. */
+    @Column(name = "session_flow_enabled", nullable = false)
+    private boolean sessionFlowEnabled = false;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
 }
