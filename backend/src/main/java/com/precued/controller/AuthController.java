@@ -8,8 +8,10 @@ import com.precued.controller.dto.SignUpRequest;
 import com.precued.controller.dto.VerifyTokenRequest;
 import com.precued.entity.AuthSession;
 import com.precued.entity.MagicLinkToken;
+import com.precued.security.PublicEndpointRateLimiter;
 import com.precued.service.AccountService;
 import com.precued.service.AuthService;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -38,21 +40,30 @@ public class AuthController {
 
     private final AuthService authService;
     private final AccountService accountService;
+    private final PublicEndpointRateLimiter rateLimiter;
 
-    public AuthController(AuthService authService, AccountService accountService) {
+    public AuthController(
+            AuthService authService,
+            AccountService accountService,
+            PublicEndpointRateLimiter rateLimiter) {
         this.authService = authService;
         this.accountService = accountService;
+        this.rateLimiter = rateLimiter;
     }
 
     @PostMapping("/magic-link")
     @ResponseStatus(HttpStatus.ACCEPTED)
     public MagicLinkResponse requestMagicLink(@Valid @RequestBody MagicLinkRequest request) {
+        rateLimiter.checkMagicLink(request.email());
         MagicLinkToken magicLink = authService.generateMagicLink(request.email());
         return new MagicLinkResponse(magicLink.getExpiresAt());
     }
 
     @PostMapping("/verify")
-    public SessionResponse verify(@Valid @RequestBody VerifyTokenRequest request) {
+    public SessionResponse verify(
+            @Valid @RequestBody VerifyTokenRequest request,
+            HttpServletRequest httpRequest) {
+        rateLimiter.checkVerification(httpRequest.getRemoteAddr());
         AuthSession session = authService.verifyMagicLink(request.token());
         return toSessionResponse(session);
     }
@@ -60,12 +71,14 @@ public class AuthController {
     @PostMapping("/signup")
     @ResponseStatus(HttpStatus.CREATED)
     public SessionResponse signUp(@Valid @RequestBody SignUpRequest request) {
+        rateLimiter.checkSignUp(request.email());
         AuthSession session = accountService.signUp(request.email(), request.password(), request.displayName());
         return toSessionResponse(session);
     }
 
     @PostMapping("/login")
     public SessionResponse logIn(@Valid @RequestBody LogInRequest request) {
+        rateLimiter.checkLogin(request.email());
         AuthSession session = accountService.logIn(request.email(), request.password());
         return toSessionResponse(session);
     }
