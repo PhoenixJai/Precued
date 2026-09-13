@@ -9,6 +9,8 @@ export type RoomStatus = "CREATED" | "ACTIVE" | "ENDED";
 export type AccessLevel = "HOST" | "MEMBER";
 export type ShareStatus = "ACTIVE" | "ENDED";
 export type ShareKind = "SCREEN" | "PRESENTATION";
+export type InviteMode = "NAMED" | "POOL";
+export type InviteStatus = "PENDING" | "USED" | "EXPIRED";
 export type SessionFlowStatus =
   | "DISABLED"
   | "NOT_CONFIGURED"
@@ -50,6 +52,28 @@ export interface RoomRole {
   isHostRole: boolean;
   isGuestRole: boolean;
   maxMembers: number | null;
+}
+
+export interface RoomInvite {
+  id: string;
+  roomRoleId: string;
+  inviteeEmail: string | null;
+  token: string;
+  mode: InviteMode;
+  maxUses: number;
+  usesCount: number;
+  remainingUses: number;
+  status: InviteStatus;
+  createdAt: string;
+  expiresAt: string | null;
+}
+
+export interface InvitePreview {
+  roomId: string;
+  roomRoleId: string;
+  roleName: string;
+  mode: InviteMode;
+  expiresAt: string | null;
 }
 
 export interface RoomParticipant {
