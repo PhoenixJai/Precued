@@ -5,6 +5,7 @@ import com.precued.controller.dto.InviteResponse;
 import com.precued.service.InviteService;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -43,5 +44,11 @@ public class RoomInviteController {
                 request.inviteeEmail(),
                 request.maxUses(),
                 request.expiresAt()));
+    }
+
+    /** DELETE means "make this invitation unusable"; history remains visible as EXPIRED. */
+    @DeleteMapping("/{inviteId}")
+    public InviteResponse expire(@PathVariable UUID roomId, @PathVariable UUID inviteId) {
+        return InviteResponse.from(inviteService.expire(roomId, inviteId));
     }
 }
