@@ -18,6 +18,7 @@ import type {
   TemplateSummary,
 } from "../types/precued";
 import { clearSession, getAuthSession, getParticipant } from "./session";
+import { rememberTemplateName } from "./templates";
 
 const API_BASE = import.meta.env.VITE_API_BASE ?? "";
 
@@ -182,8 +183,10 @@ export const api = {
     });
   },
 
-  getRoom(roomId: string) {
-    return request<Room>(`/api/rooms/${roomId}`);
+  async getRoom(roomId: string) {
+    const room = await request<Room>(`/api/rooms/${roomId}`);
+    rememberTemplateName(room.templateId, room.templateName);
+    return room;
   },
 
   getSessionFlow(roomId: string) {
