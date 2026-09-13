@@ -7,7 +7,23 @@
 --    preserved independently at runtime just like is_host_role/max_members.
 
 ALTER TABLE room_role
-    ADD COLUMN is_guest_role BOOLEAN NOT NULL DEFAULT false;
+    ADD COLUMN is_guest_role BOOLEAN;
+
+-- Backfill existing RoomRole snapshots from their source TemplateRole before
+-- making the column independent. Rows whose source has already disappeared
+-- (or was never present) fail closed to false.
+UPDATE room_role rr
+SET is_guest_role = tr.is_guest_role
+FROM template_role tr
+WHERE rr.source_template_role_id = tr.id;
+
+UPDATE room_role
+SET is_guest_role = false
+WHERE is_guest_role IS NULL;
+
+ALTER TABLE room_role
+    ALTER COLUMN is_guest_role SET DEFAULT false,
+    ALTER COLUMN is_guest_role SET NOT NULL;
 
 ALTER TABLE room_role
     DROP CONSTRAINT IF EXISTS room_role_source_template_role_id_fkey;
