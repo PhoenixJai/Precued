@@ -14,6 +14,7 @@ import { ConnectionState, RoomEvent, Track } from "livekit-client";
 import type { DataPacket_Kind, RemoteParticipant } from "livekit-client";
 import { AppShell, Brand } from "../components/AppShell";
 import { api, describeSlideImageError } from "../lib/api";
+import { defaultVisibleRoleIds, toggleVisibleRoleId } from "../lib/fallbackRoleVisibility";
 import { initials } from "../lib/initials";
 import {
   clearShareGrantIds,
@@ -117,6 +118,7 @@ function CallExperience({ roomId }: { roomId: string }) {
   const [presets, setPresets] = useState<TemplatePreset[]>([]);
   const [activeShares, setActiveShares] = useState<ActiveShare[]>([]);
   const [selectedPresetId, setSelectedPresetId] = useState<string | null>(null);
+  const [fallbackVisibleRoleIds, setFallbackVisibleRoleIds] = useState<string[] | null>(null);
   const [moreOpen, setMoreOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -295,6 +297,22 @@ function CallExperience({ roomId }: { roomId: string }) {
     }
   }, [currentShare?.id, currentShareRoleKey, presets, roles, roleIdsForPreset, selectedPresetId]);
 
+  // A custom template has no saved TemplatePreset rows yet. Keep a local
+  // role selection in sync with the live Share so its host still gets real
+  // per-role visibility controls instead of an empty preset bar.
+  useEffect(() => {
+    if (presets.length > 0) {
+      setFallbackVisibleRoleIds(null);
+      return;
+    }
+    if (roles.length === 0) return;
+    if (currentShare?.kind === "SCREEN") {
+      setFallbackVisibleRoleIds([...currentShare.roomRoleIds]);
+      return;
+    }
+    setFallbackVisibleRoleIds((current) => current ?? defaultVisibleRoleIds(roles));
+  }, [presets.length, roles, currentShare?.id, currentShare?.kind, currentShareRoleKey]);
+
   useEffect(() => {
     const handleData = (
       payload: Uint8Array,
@@ -327,6 +345,7 @@ function CallExperience({ roomId }: { roomId: string }) {
   const visibleRoleNames = currentShare
     ? currentShare.roomRoleIds.map((id) => roleById.get(id)?.name).filter((name): name is string => Boolean(name))
     : [];
+  const fallbackSelectedRoleIds = fallbackVisibleRoleIds ?? defaultVisibleRoleIds(roles);
 
   const currentScreenTrack = currentShare
     ? screenTracks.find((trackRef: any) => trackRef.publication?.trackName?.startsWith(`${currentShare.id}:`))
@@ -483,18 +502,51 @@ function CallExperience({ roomId }: { roomId: string }) {
     }
   }
 
+  async function setFallbackScreenRoleVisibility(roomRoleId: string) {
+    if (!me.isHost || presets.length > 0) return;
+    const nextRoleIds = toggleVisibleRoleId(fallbackSelectedRoleIds, roomRoleId);
+    setFallbackVisibleRoleIds(nextRoleIds);
+
+    if (!currentShare || currentShare.kind !== "SCREEN") return;
+    const shouldBeVisible = nextRoleIds.includes(roomRoleId);
+    const isVisible = currentShare.roomRoleIds.includes(roomRoleId);
+    if (shouldBeVisible === isVisible) return;
+
+    setBusy(true);
+    setError(null);
+    try {
+      if (shouldBeVisible) {
+        const grant = await api.createGrant(currentShare.id, roomRoleId);
+        rememberGrantId(currentShare.id, roomRoleId, grant.id);
+      } else {
+        const activeGrants = (await api.getShareGrants(currentShare.id))
+          .filter((grant) => !grant.revokedAt && grant.shareSlideId === null);
+        const grant = activeGrants.find((item) => item.roomRoleId === roomRoleId);
+        if (!grant) throw new Error("Unable to find the active visibility grant for that role.");
+        await api.revokeGrant(grant.id);
+        forgetGrantId(currentShare.id, roomRoleId);
+      }
+      await refresh();
+    } catch (err) {
+      setFallbackVisibleRoleIds([...currentShare.roomRoleIds]);
+      setError(err instanceof Error ? err.message : "Unable to update visibility");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function startScreenShare() {
     if (!me.isHost || currentShare) return;
     const preset = presets.find((item) => item.id === selectedPresetId) ?? presets[0];
-    if (!preset) return;
+    const targetRoleIds = preset ? roleIdsForPreset(preset) : fallbackSelectedRoleIds;
     setBusy(true);
     setError(null);
     setMoreOpen(false);
     let createdShare: ActiveShare | null = null;
     try {
-      const share = await api.startShare(roomId, me.id, preset.id, "Screen share");
+      const share = await api.startShare(roomId, me.id, preset?.id ?? null, "Screen share");
       createdShare = { id: share.id, label: share.label, kind: share.kind, currentSlideIndex: share.currentSlideIndex, roomRoleIds: [] };
-      for (const roomRoleId of roleIdsForPreset(preset)) {
+      for (const roomRoleId of targetRoleIds) {
         const grant = await api.createGrant(share.id, roomRoleId);
         rememberGrantId(share.id, roomRoleId, grant.id);
       }
@@ -544,6 +596,7 @@ function CallExperience({ roomId }: { roomId: string }) {
   if (connectionState !== ConnectionState.Connected) return <ConnectingScreen />;
 
   const sessionTitle = roomInfo ? templateName(roomInfo.templateId) : "Session";
+  const nonHostRoles = roles.filter((role) => !role.isHostRole);
 
   return (
     <AppShell showTaglines={false}>
@@ -576,7 +629,7 @@ function CallExperience({ roomId }: { roomId: string }) {
             {me.isHost ? (
               currentShare?.kind === "PRESENTATION" ? (
                 <SlideVisibilityMatrix
-                  roles={roles.filter((role) => !role.isHostRole)}
+                  roles={nonHostRoles}
                   slides={slides}
                   grants={grants}
                   thumbnailUrls={thumbnailUrls}
@@ -589,7 +642,7 @@ function CallExperience({ roomId }: { roomId: string }) {
                 <div className="visibility-controls surface-card-lite">
                   <strong>Who can view the current share? <span className="info-icon">i</span></strong>
                   <div className="preset-tabs">
-                    {presets.map((preset) => (
+                    {presets.length > 0 ? presets.map((preset) => (
                       <button
                         key={preset.id}
                         className={selectedPresetId === preset.id ? "active" : ""}
@@ -598,7 +651,18 @@ function CallExperience({ roomId }: { roomId: string }) {
                       >
                         ♙ {preset.name}
                       </button>
-                    ))}
+                    )) : nonHostRoles.length > 0 ? nonHostRoles.map((role) => (
+                      <button
+                        key={role.id}
+                        className={fallbackSelectedRoleIds.includes(role.id) ? "active" : ""}
+                        disabled={busy}
+                        onClick={() => { void setFallbackScreenRoleVisibility(role.id); }}
+                      >
+                        ♙ {role.name}
+                      </button>
+                    )) : (
+                      <span className="empty-state-note">Add a non-host role to control who can view shared content.</span>
+                    )}
                   </div>
                 </div>
               )
