@@ -156,7 +156,7 @@ public class InviteService {
     }
 
     /** Public token preview used before a guest has a RoomParticipant session. */
-    @Transactional
+    @Transactional(noRollbackFor = InviteUnavailableException.class)
     public Invite resolve(String token) {
         Invite invite = inviteRepository.findByToken(token)
                 .orElseThrow(() -> new IllegalArgumentException("No invite with this token"));
@@ -195,10 +195,10 @@ public class InviteService {
 
     private void requirePending(Invite invite) {
         if (invite.getStatus() == Invite.Status.EXPIRED) {
-            throw new IllegalStateException("This invite has expired");
+            throw new InviteUnavailableException("This invite has expired");
         }
         if (invite.getStatus() == Invite.Status.USED || invite.getUsesCount() >= invite.getMaxUses()) {
-            throw new IllegalStateException("This invite has already been fully used");
+            throw new InviteUnavailableException("This invite has already been fully used");
         }
     }
 
