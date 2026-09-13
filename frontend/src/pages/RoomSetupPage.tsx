@@ -22,6 +22,7 @@ export default function RoomSetupPage() {
   const [poolUses, setPoolUses] = useState<Record<string, string>>({});
   const [creatingForRole, setCreatingForRole] = useState<string | null>(null);
   const [copiedInviteId, setCopiedInviteId] = useState<string | null>(null);
+  const [expiringInviteId, setExpiringInviteId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -77,6 +78,19 @@ export default function RoomSetupPage() {
     await navigator.clipboard.writeText(url);
     setCopiedInviteId(invite.id);
     window.setTimeout(() => setCopiedInviteId(null), 1400);
+  }
+
+  async function expireInvite(invite: RoomInvite) {
+    setExpiringInviteId(invite.id);
+    setError(null);
+    try {
+      const expired = await api.expireRoomInvite(roomId, invite.id);
+      setInvites((current) => current.map((item) => item.id === expired.id ? expired : item));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unable to cancel invite");
+    } finally {
+      setExpiringInviteId(null);
+    }
   }
 
   async function createNamedInvite(role: RoomRole) {
@@ -169,11 +183,13 @@ export default function RoomSetupPage() {
                     poolUses={poolUses[row.role.id] ?? ""}
                     busy={creatingForRole === row.role.id}
                     copiedInviteId={copiedInviteId}
+                    expiringInviteId={expiringInviteId}
                     onNamedEmailChange={(value) => setNamedEmails((current) => ({ ...current, [row.role.id]: value }))}
                     onPoolUsesChange={(value) => setPoolUses((current) => ({ ...current, [row.role.id]: value }))}
                     onCreateNamed={() => { void createNamedInvite(row.role); }}
                     onCreatePool={() => { void createPoolInvite(row.role); }}
                     onCopy={(invite) => { void copyInvite(invite); }}
+                    onExpire={(invite) => { void expireInvite(invite); }}
                   />
                 );
               })}
@@ -225,11 +241,13 @@ function RoleInviteTracker(props: {
   poolUses: string;
   busy: boolean;
   copiedInviteId: string | null;
+  expiringInviteId: string | null;
   onNamedEmailChange: (value: string) => void;
   onPoolUsesChange: (value: string) => void;
   onCreateNamed: () => void;
   onCreatePool: () => void;
   onCopy: (invite: RoomInvite) => void;
+  onExpire: (invite: RoomInvite) => void;
 }) {
   const joinedNames = props.joinedParticipants.map((participant) => participant.displayName).join(", ");
   const noBoundedSeats = props.availableSeats !== null && props.availableSeats <= 0;
@@ -275,9 +293,18 @@ function RoleInviteTracker(props: {
                     </small>
                   </div>
                   {invite.status === "PENDING" && (
-                    <button className="secondary-button compact" onClick={() => props.onCopy(invite)}>
-                      {props.copiedInviteId === invite.id ? "Copied" : "Copy link"}
-                    </button>
+                    <div className="invite-record-actions">
+                      <button className="secondary-button compact" onClick={() => props.onCopy(invite)}>
+                        {props.copiedInviteId === invite.id ? "Copied" : "Copy link"}
+                      </button>
+                      <button
+                        className="secondary-button compact"
+                        disabled={props.expiringInviteId === invite.id}
+                        onClick={() => props.onExpire(invite)}
+                      >
+                        {props.expiringInviteId === invite.id ? "Cancelling…" : "Cancel"}
+                      </button>
+                    </div>
                   )}
                 </div>
               ))}
