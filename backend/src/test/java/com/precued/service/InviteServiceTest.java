@@ -142,6 +142,23 @@ class InviteServiceTest {
     }
 
     @Test
+    void expirePendingInvite_releasesItFromFutureCapacityReservations() {
+        Invite invite = new Invite();
+        invite.setId(UUID.randomUUID());
+        invite.setRoomRole(candidateRole);
+        invite.setStatus(Invite.Status.PENDING);
+        invite.setMode(Invite.Mode.NAMED);
+        invite.setMaxUses(1);
+        invite.setUsesCount(0);
+        when(inviteRepository.findById(invite.getId())).thenReturn(Optional.of(invite));
+        when(inviteRepository.save(any(Invite.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        Invite expired = service.expire(room.getId(), invite.getId());
+
+        assertThat(expired.getStatus()).isEqualTo(Invite.Status.EXPIRED);
+    }
+
+    @Test
     void resolveExpiredInvite_marksItExpiredAndRejectsIt() {
         Invite invite = new Invite();
         invite.setToken("expired-token");
