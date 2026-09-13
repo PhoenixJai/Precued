@@ -7,12 +7,14 @@ export function findHostRole(roles: RoomRole[]): RoomRole | undefined {
 
 export interface RoleSetupRow {
   role: RoomRole;
-  /**
-   * Every currently-present participant holding this role, not just one —
-   * a role with maxMembers === null (e.g. Jury, Audience) can legitimately
-   * hold several at once.
-   */
+  /** Currently present participants holding this role. */
   joinedParticipants: RoomParticipantWithGrants[];
+  /**
+   * Stable room memberships holding this role, including someone who has
+   * disconnected. A consumed invite keeps its seat/history, so capacity must
+   * use this count rather than presence alone.
+   */
+  assignedParticipants: RoomParticipantWithGrants[];
 }
 
 /** One row per RoomRole, in whatever order the backend returned them. */
@@ -20,10 +22,14 @@ export function buildRoleSetupRows(
   roles: RoomRole[],
   participants: RoomParticipantWithGrants[],
 ): RoleSetupRow[] {
-  return roles.map((role) => ({
-    role,
-    joinedParticipants: participants.filter(
-      (participant) => participant.activeRoomRoleId === role.id && !participant.leftAt,
-    ),
-  }));
+  return roles.map((role) => {
+    const assignedParticipants = participants.filter(
+      (participant) => participant.activeRoomRoleId === role.id,
+    );
+    return {
+      role,
+      assignedParticipants,
+      joinedParticipants: assignedParticipants.filter((participant) => !participant.leftAt),
+    };
+  });
 }
