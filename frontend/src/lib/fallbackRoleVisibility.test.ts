@@ -6,7 +6,7 @@ function role(id: string, name: string, isHostRole = false): RoomRole {
   return {
     id,
     roomId: "room-1",
-    roleKey: name.toLowerCase().replaceAll(" ", "_"),
+    roleKey: name.toLowerCase().replace(/ /g, "_"),
     name,
     isHostRole,
     isGuestRole: false,
