@@ -55,7 +55,7 @@ export function AppShell({ children, showTaglines = true }: { children: ReactNod
         </div>
       </header>
       <main className="page-background">
-        {callMatch?.params.roomId && <SessionFlowCallDock roomId={callMatch.params.roomId} />}
+        {!showTaglines && callMatch?.params.roomId && <SessionFlowCallDock roomId={callMatch.params.roomId} />}
         {showTaglines && <div className="side-tagline left-tagline">CONVERSATIONS<br />DRIVE PROGRESS<span /></div>}
         {children}
         {showTaglines && <div className="side-tagline right-tagline">THE<br />RIGHT<br />PEOPLE<br />SEE<br />MORE<span /></div>}
