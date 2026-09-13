@@ -36,14 +36,7 @@ type ProblemDetail = {
 type RequestAuthMode = "participant" | "none";
 
 async function request<T>(path: string, init?: RequestInit, authMode: RequestAuthMode = "participant"): Promise<T> {
-  // Most requests scoped to a Room or to acting as a participant need the
-  // RoomParticipant bearer token. Some public endpoints intentionally must
-  // NOT receive it, because /api/templates/** treats any supplied bearer as
-  // an Account/AuthSession token. Those callers opt out with authMode=none.
   const participant = authMode === "participant" ? getParticipant() : null;
-  // A FormData body (presentation upload) must let the browser set its own
-  // multipart/form-data boundary header — forcing application/json here
-  // would break the request.
   const isFormData = init?.body instanceof FormData;
   const response = await fetch(`${API_BASE}${path}`, {
     ...init,
@@ -187,6 +180,12 @@ export const api = {
     return request<RoomInvite>(`/api/rooms/${roomId}/invites`, {
       method: "POST",
       body: JSON.stringify(input),
+    });
+  },
+
+  expireRoomInvite(roomId: string, inviteId: string) {
+    return request<RoomInvite>(`/api/rooms/${roomId}/invites/${inviteId}/expire`, {
+      method: "POST",
     });
   },
 
