@@ -12,7 +12,14 @@ import java.util.Optional;
 import java.util.UUID;
 
 public interface InviteRepository extends JpaRepository<Invite, UUID> {
-    Optional<Invite> findByToken(String token);
+    @Query("""
+            select i from Invite i
+            join fetch i.roomRole rr
+            join fetch rr.room r
+            where i.token = :token
+            """)
+    Optional<Invite> findByToken(@Param("token") String token);
+
     List<Invite> findByRoomRoleId(UUID roomRoleId);
 
     @Query("""
