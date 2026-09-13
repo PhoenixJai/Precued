@@ -54,15 +54,16 @@ class PublicEndpointRateLimiterTest {
     }
 
     @Test
-    void signup_allowsFiveAttemptsPerEmailWithinTenMinutes() {
+    void signup_allowsFiveAttemptsPerClientWithinTenMinutes() {
         for (int i = 0; i < 5; i++) {
-            limiter.checkSignUp("new@example.com");
+            limiter.checkSignUp("203.0.113.10");
         }
 
         RateLimitExceededException exception =
-                assertThrows(RateLimitExceededException.class, () -> limiter.checkSignUp("new@example.com"));
+                assertThrows(RateLimitExceededException.class, () -> limiter.checkSignUp("203.0.113.10"));
 
         assertEquals(600, exception.getRetryAfterSeconds());
+        assertDoesNotThrow(() -> limiter.checkSignUp("203.0.113.11"));
     }
 
     @Test
