@@ -86,7 +86,7 @@ class ParticipantRoleAssignmentServiceTest {
         RoomParticipant guest = participantWithUser(null);
         when(roomParticipantRepository.findById(participantId)).thenReturn(Optional.of(guest));
         RoomRole hostRole = roleInRoom(true);
-        when(roomRoleRepository.findById(roleId)).thenReturn(Optional.of(hostRole));
+        when(roomRoleRepository.findByIdForUpdate(roleId)).thenReturn(Optional.of(hostRole));
 
         assertThatThrownBy(() -> service.assign(participantId, roleId))
                 .isInstanceOf(IllegalStateException.class)
@@ -107,7 +107,7 @@ class ParticipantRoleAssignmentServiceTest {
         RoomParticipant host = participantWithUser(user);
         when(roomParticipantRepository.findById(participantId)).thenReturn(Optional.of(host));
         RoomRole hostRole = roleInRoom(true);
-        when(roomRoleRepository.findById(roleId)).thenReturn(Optional.of(hostRole));
+        when(roomRoleRepository.findByIdForUpdate(roleId)).thenReturn(Optional.of(hostRole));
         when(assignmentRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
 
         assertThat(service.assign(participantId, roleId)).isNotNull();
@@ -126,7 +126,7 @@ class ParticipantRoleAssignmentServiceTest {
         when(roomParticipantRepository.findById(participantId)).thenReturn(Optional.of(host));
         RoomRole hostRole = roleInRoom(true);
         hostRole.setMaxMembers(1);
-        when(roomRoleRepository.findById(roleId)).thenReturn(Optional.of(hostRole));
+        when(roomRoleRepository.findByIdForUpdate(roleId)).thenReturn(Optional.of(hostRole));
         when(assignmentRepository.countByRoomRoleIdAndRevokedAtIsNull(roleId)).thenReturn(1L);
 
         assertThatThrownBy(() -> service.assign(participantId, roleId))
@@ -145,7 +145,7 @@ class ParticipantRoleAssignmentServiceTest {
         RoomParticipant guest = participantWithUser(null);
         when(roomParticipantRepository.findById(participantId)).thenReturn(Optional.of(guest));
         RoomRole memberRole = roleInRoom(false);
-        when(roomRoleRepository.findById(roleId)).thenReturn(Optional.of(memberRole));
+        when(roomRoleRepository.findByIdForUpdate(roleId)).thenReturn(Optional.of(memberRole));
 
         assertThatThrownBy(() -> service.assign(participantId, roleId))
                 .isInstanceOf(IllegalStateException.class)
@@ -171,7 +171,7 @@ class ParticipantRoleAssignmentServiceTest {
         hostRole.setId(roleId);
         hostRole.setRoom(otherRoom);
         hostRole.setHostRole(true);
-        when(roomRoleRepository.findById(roleId)).thenReturn(Optional.of(hostRole));
+        when(roomRoleRepository.findByIdForUpdate(roleId)).thenReturn(Optional.of(hostRole));
 
         assertThatThrownBy(() -> service.assign(participantId, roleId))
                 .isInstanceOf(IllegalStateException.class)
@@ -188,7 +188,7 @@ class ParticipantRoleAssignmentServiceTest {
         RoomParticipant target = participantWithUser(null);
         when(roomParticipantRepository.findById(participantId)).thenReturn(Optional.of(target));
         RoomRole role = roleInRoom(true);
-        when(roomRoleRepository.findById(roleId)).thenReturn(Optional.of(role));
+        when(roomRoleRepository.findByIdForUpdate(roleId)).thenReturn(Optional.of(role));
 
         RoomParticipant someoneElse = new RoomParticipant();
         someoneElse.setId(UUID.randomUUID());
