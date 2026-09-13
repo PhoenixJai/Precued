@@ -1,6 +1,8 @@
 package com.precued.controller;
 
+import com.precued.controller.dto.SaveTemplateSessionFlowRequest;
 import com.precued.controller.dto.TemplatePresetResponse;
+import com.precued.controller.dto.TemplateSessionFlowResponse;
 import com.precued.entity.AuthSession;
 import com.precued.entity.Template;
 import com.precued.entity.TemplateRole;
@@ -10,6 +12,7 @@ import com.precued.repository.RoomParticipantRepository;
 import com.precued.security.AuthenticationRequiredException;
 import com.precued.service.TemplatePresetService;
 import com.precued.service.TemplateService;
+import com.precued.service.TemplateSessionFlowService;
 import org.junit.jupiter.api.Test;
 import com.precued.config.SecurityConfig;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -24,6 +27,7 @@ import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -31,29 +35,23 @@ import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @WebMvcTest(TemplateController.class)
-// Real SecurityConfig, not disabled — @WebMvcTest doesn't pick up plain
-// @Configuration beans like SecurityConfig on its own.
 @Import(SecurityConfig.class)
 class TemplateControllerTest {
 
     @Autowired private MockMvc mockMvc;
     @MockBean private TemplatePresetService templatePresetService;
     @MockBean private TemplateService templateService;
-    // WebMvcConfig (which @WebMvcTest picks up as a WebMvcConfigurer) wires
-    // both interceptor beans regardless of whether this controller's own
-    // paths need them, so both repositories must be mockable for the
-    // context to load. AuthSessionInterceptor now also runs on
-    // /api/templates/** (M-Templates) — see WebMvcConfig's registration.
+    @MockBean private TemplateSessionFlowService templateSessionFlowService;
     @MockBean private RoomParticipantRepository roomParticipantRepository;
     @MockBean private AuthSessionRepository authSessionRepository;
 
     private static final String TEST_AUTH_TOKEN = "test-auth-session-token";
 
-    /** Stubs a valid AuthSession — required by AuthSessionInterceptor whenever a token is sent. */
     private User stubAuthenticatedUser() {
         User user = new User();
         user.setId(UUID.randomUUID());
@@ -227,6 +225,49 @@ class TemplateControllerTest {
                 .andExpect(status().isNoContent());
 
         verify(templateService).removeRole("some-template", roleId);
+    }
+
+    @Test
+    void getSessionFlow_returnsConfigTimeDefinition() throws Exception {
+        stubAuthenticatedUser();
+        String templateId = UUID.randomUUID().toString();
+        UUID stageId = UUID.randomUUID();
+        UUID roleId = UUID.randomUUID();
+        when(templateSessionFlowService.get(templateId)).thenReturn(new TemplateSessionFlowResponse(
+                templateId,
+                true,
+                List.of(new TemplateSessionFlowResponse.Stage(
+                        stageId, "questions", "Questions", 0, 300, List.of(roleId)))));
+
+        mockMvc.perform(get("/api/templates/{templateId}/session-flow", templateId)
+                        .header("Authorization", "Bearer " + TEST_AUTH_TOKEN))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.enabled").value(true))
+                .andExpect(jsonPath("$.stages[0].id").value(stageId.toString()))
+                .andExpect(jsonPath("$.stages[0].templateRoleIds[0]").value(roleId.toString()));
+    }
+
+    @Test
+    void saveSessionFlow_acceptsOrderedStages() throws Exception {
+        stubAuthenticatedUser();
+        String templateId = UUID.randomUUID().toString();
+        UUID roleId = UUID.randomUUID();
+        UUID stageId = UUID.randomUUID();
+        TemplateSessionFlowResponse response = new TemplateSessionFlowResponse(
+                templateId,
+                true,
+                List.of(new TemplateSessionFlowResponse.Stage(
+                        stageId, "questions", "Questions", 0, null, List.of(roleId))));
+        when(templateSessionFlowService.save(eq(templateId), any(SaveTemplateSessionFlowRequest.class)))
+                .thenReturn(response);
+
+        mockMvc.perform(put("/api/templates/{templateId}/session-flow", templateId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .header("Authorization", "Bearer " + TEST_AUTH_TOKEN)
+                        .content("{\"enabled\":true,\"stages\":[{\"id\":null,\"stageKey\":\"questions\",\"name\":\"Questions\",\"durationSeconds\":null,\"templateRoleIds\":[\"" + roleId + "\"]}]}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.enabled").value(true))
+                .andExpect(jsonPath("$.stages[0].stageKey").value("questions"));
     }
 
     private Template customTemplate() {

@@ -5,6 +5,7 @@ import "@livekit/components-styles";
 import App from "./App";
 import "./styles.css";
 import "./sessionFlow.css";
+import "./templateSessionFlowBuilder.css";
 
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>

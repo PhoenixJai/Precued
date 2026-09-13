@@ -1,28 +1,16 @@
 import { FormEvent, useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { AppShell } from "../components/AppShell";
+import { TemplateSessionFlowBuilder } from "../components/TemplateSessionFlowBuilder";
 import { api } from "../lib/api";
 import { getAuthSession } from "../lib/session";
 import { validateNewTemplateRole } from "../lib/templateRoleBuilder";
 import type { TemplateRoleDefinition, TemplateSummary } from "../types/precued";
 
 /**
- * Precued_Issues_Update_3.md, M-Templates: the custom role builder AC.
- * Deliberately just the template + its role definitions, wired to
- * persistence — not yet reachable from room creation (TemplatePickerPage
- * still only creates rooms from the three built-in templates) and no
- * visibility-permission-matrix editing, both explicitly out of scope for
- * this milestone's first chunk.
- *
- * Every add/remove role action below persists immediately (see
- * addRole/removeRole) — there's no local-only draft state and nothing
- * separate to "save." The "Done" button is a navigation action, not a
- * data-committing one; it exists so there's a clear way back to Profile's
- * "Your templates" (ownership already works via Template.createdBy, set
- * at creation in TemplateService#createCustomTemplate — this does not
- * depend on the Auth & Account Overhaul's Step 3 owner_user_id/is_builtin/
- * visibility migration, which is a column rename/addition for a different,
- * not-yet-built concern: public template sharing).
+ * Custom Template authoring: role definitions plus optional Session Flow.
+ * Role changes persist immediately; Session Flow is edited as one ordered
+ * definition and saved explicitly by TemplateSessionFlowBuilder.
  */
 export default function CustomTemplateBuilderPage() {
   const navigate = useNavigate();
@@ -91,6 +79,7 @@ function RoleBuilder({ templateId, authSessionToken }: { templateId: string; aut
   const navigate = useNavigate();
   const [template, setTemplate] = useState<TemplateSummary | null>(null);
   const [roles, setRoles] = useState<TemplateRoleDefinition[]>([]);
+  const [rolesLoaded, setRolesLoaded] = useState(false);
   const [roleKey, setRoleKey] = useState("");
   const [roleName, setRoleName] = useState("");
   const [isHostRole, setIsHostRole] = useState(false);
@@ -106,10 +95,14 @@ function RoleBuilder({ templateId, authSessionToken }: { templateId: string; aut
     ]);
     setTemplate(nextTemplate);
     setRoles(nextRoles);
+    setRolesLoaded(true);
   }
 
   useEffect(() => {
-    refresh().catch((err) => setError(err instanceof Error ? err.message : "Unable to load this template"));
+    refresh().catch((err) => {
+      setRolesLoaded(true);
+      setError(err instanceof Error ? err.message : "Unable to load this template");
+    });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [templateId]);
 
@@ -158,7 +151,7 @@ function RoleBuilder({ templateId, authSessionToken }: { templateId: string; aut
         <button className="text-button back-button" onClick={() => navigate("/templates")}>← Back to templates</button>
         <div className="page-heading">
           <h1>{template?.name ?? "Loading..."}</h1>
-          <p>Add the roles this template needs. At most one can be the host role.</p>
+          <p>Configure the roles and optional Session Flow for this reusable template.</p>
         </div>
 
         <div className="setup-layout">
@@ -186,11 +179,6 @@ function RoleBuilder({ templateId, authSessionToken }: { templateId: string; aut
               </div>
             ))}
 
-            {/* Every add/remove above already persists immediately (see
-                addRole/removeRole) — this isn't a "save" in the sense of
-                committing unsaved data, it's the terminal action that
-                actually gets the user back to where the template they just
-                built is visible (Profile's "Your templates"). */}
             <button className="primary-button wide finish-template-button" onClick={() => navigate("/profile")}>
               Done — go to your profile  →
             </button>
@@ -232,6 +220,14 @@ function RoleBuilder({ templateId, authSessionToken }: { templateId: string; aut
             </form>
           </aside>
         </div>
+
+        <TemplateSessionFlowBuilder
+          templateId={templateId}
+          authSessionToken={authSessionToken}
+          roles={roles}
+          rolesLoaded={rolesLoaded}
+        />
+
         {error && <div className="error-banner">{error}</div>}
       </section>
     </AppShell>

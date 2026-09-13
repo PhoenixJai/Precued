@@ -2,17 +2,21 @@ package com.precued.controller;
 
 import com.precued.controller.dto.CreateTemplateRequest;
 import com.precued.controller.dto.CreateTemplateRoleRequest;
+import com.precued.controller.dto.SaveTemplateSessionFlowRequest;
 import com.precued.controller.dto.TemplatePresetResponse;
 import com.precued.controller.dto.TemplateResponse;
 import com.precued.controller.dto.TemplateRoleResponse;
+import com.precued.controller.dto.TemplateSessionFlowResponse;
 import com.precued.service.TemplatePresetService;
 import com.precued.service.TemplateService;
+import com.precued.service.TemplateSessionFlowService;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.ResponseStatus;
@@ -27,10 +31,15 @@ public class TemplateController {
 
     private final TemplatePresetService templatePresetService;
     private final TemplateService templateService;
+    private final TemplateSessionFlowService templateSessionFlowService;
 
-    public TemplateController(TemplatePresetService templatePresetService, TemplateService templateService) {
+    public TemplateController(
+            TemplatePresetService templatePresetService,
+            TemplateService templateService,
+            TemplateSessionFlowService templateSessionFlowService) {
         this.templatePresetService = templatePresetService;
         this.templateService = templateService;
+        this.templateSessionFlowService = templateSessionFlowService;
     }
 
     @GetMapping("/{templateId}/presets")
@@ -72,5 +81,17 @@ public class TemplateController {
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void removeRole(@PathVariable String templateId, @PathVariable UUID roleId) {
         templateService.removeRole(templateId, roleId);
+    }
+
+    @GetMapping("/{templateId}/session-flow")
+    public TemplateSessionFlowResponse getSessionFlow(@PathVariable String templateId) {
+        return templateSessionFlowService.get(templateId);
+    }
+
+    @PutMapping("/{templateId}/session-flow")
+    public TemplateSessionFlowResponse saveSessionFlow(
+            @PathVariable String templateId,
+            @Valid @RequestBody SaveTemplateSessionFlowRequest request) {
+        return templateSessionFlowService.save(templateId, request);
     }
 }

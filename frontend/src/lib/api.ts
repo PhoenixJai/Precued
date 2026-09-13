@@ -8,6 +8,7 @@ import type {
   RoomParticipant,
   RoomParticipantWithGrants,
   RoomRole,
+  SaveTemplateSessionFlowInput,
   SessionFlow,
   SessionResponse,
   Share,
@@ -15,6 +16,7 @@ import type {
   ShareSlide,
   TemplatePreset,
   TemplateRoleDefinition,
+  TemplateSessionFlowDefinition,
   TemplateSummary,
 } from "../types/precued";
 import { clearSession, getAuthSession, getParticipant } from "./session";
@@ -270,6 +272,20 @@ export const api = {
   getTemplateRoles(templateId: string, authSessionToken: string) {
     return request<TemplateRoleDefinition[]>(`/api/templates/${templateId}/roles`, {
       headers: { Authorization: `Bearer ${authSessionToken}` },
+    });
+  },
+
+  getTemplateSessionFlow(templateId: string, authSessionToken: string) {
+    return request<TemplateSessionFlowDefinition>(`/api/templates/${templateId}/session-flow`, {
+      headers: { Authorization: `Bearer ${authSessionToken}` },
+    });
+  },
+
+  saveTemplateSessionFlow(templateId: string, flow: SaveTemplateSessionFlowInput, authSessionToken: string) {
+    return request<TemplateSessionFlowDefinition>(`/api/templates/${templateId}/session-flow`, {
+      method: "PUT",
+      headers: { Authorization: `Bearer ${authSessionToken}` },
+      body: JSON.stringify(flow),
     });
   },
 
