@@ -1,8 +1,9 @@
 import type { ReactNode } from "react";
 import { useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useMatch, useNavigate } from "react-router-dom";
 import { initials } from "../lib/initials";
 import { clearSession, getAuthSession } from "../lib/session";
+import { SessionFlowCallDock } from "./SessionFlowCallDock";
 
 export function Brand() {
   return (
@@ -15,6 +16,7 @@ export function Brand() {
 
 export function AppShell({ children, showTaglines = true }: { children: ReactNode; showTaglines?: boolean }) {
   const navigate = useNavigate();
+  const callMatch = useMatch("/rooms/:roomId/call");
   const auth = getAuthSession();
   const [menuOpen, setMenuOpen] = useState(false);
 
@@ -53,6 +55,7 @@ export function AppShell({ children, showTaglines = true }: { children: ReactNod
         </div>
       </header>
       <main className="page-background">
+        {callMatch?.params.roomId && <SessionFlowCallDock roomId={callMatch.params.roomId} />}
         {showTaglines && <div className="side-tagline left-tagline">CONVERSATIONS<br />DRIVE PROGRESS<span /></div>}
         {children}
         {showTaglines && <div className="side-tagline right-tagline">THE<br />RIGHT<br />PEOPLE<br />SEE<br />MORE<span /></div>}
