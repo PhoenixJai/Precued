@@ -50,14 +50,15 @@ export default function TemplatePickerPage() {
   useEffect(() => {
     const auth = getAuthSession();
     if (!auth) return;
+    const authToken = auth.sessionToken;
     let cancelled = false;
 
     async function loadCustomTemplates() {
       try {
-        const summaries = await api.listMyTemplates(auth.sessionToken);
+        const summaries = await api.listMyTemplates(authToken);
         const cards = customTemplateLaunchCards(summaries);
         const roleEntries = await Promise.all(
-          cards.map(async (card) => [card.id, await api.getTemplateRoles(card.id, auth.sessionToken)] as const),
+          cards.map(async (card) => [card.id, await api.getTemplateRoles(card.id, authToken)] as const),
         );
         if (cancelled) return;
         setCustomTemplates(cards);
