@@ -1,5 +1,8 @@
 import type { ReactNode } from "react";
-import { Link } from "react-router-dom";
+import { useState } from "react";
+import { Link, useNavigate } from "react-router-dom";
+import { initials } from "../lib/initials";
+import { clearSession, getAuthSession } from "../lib/session";
 
 export function Brand() {
   return (
@@ -11,10 +14,20 @@ export function Brand() {
 }
 
 export function AppShell({ children, showTaglines = true }: { children: ReactNode; showTaglines?: boolean }) {
+  const navigate = useNavigate();
+  const auth = getAuthSession();
+  const [menuOpen, setMenuOpen] = useState(false);
+
+  function logOut() {
+    clearSession();
+    setMenuOpen(false);
+    navigate("/", { replace: true });
+  }
+
   return (
     <div className="app-shell">
       <header className="topbar">
-        <Link to="/templates" className="brand-link">
+        <Link to={auth ? "/profile" : "/"} className="brand-link">
           <Brand />
         </Link>
         <nav className="topnav" aria-label="Main navigation">
@@ -24,7 +37,19 @@ export function AppShell({ children, showTaglines = true }: { children: ReactNod
         </nav>
         <div className="topbar-actions">
           <button className="secondary-button compact">Get in touch</button>
-          <button className="avatar-button" aria-label="Account menu">JD⌄</button>
+          {auth && (
+            <div className="account-menu-wrap">
+              <button className="avatar-button" aria-label="Account menu" onClick={() => setMenuOpen(!menuOpen)}>
+                {initials(auth.displayName)}⌄
+              </button>
+              {menuOpen && (
+                <div className="account-menu">
+                  <Link to="/profile" onClick={() => setMenuOpen(false)}>Profile</Link>
+                  <button type="button" onClick={logOut}>Log out</button>
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </header>
       <main className="page-background">

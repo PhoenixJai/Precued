@@ -16,7 +16,12 @@ export default function LandingPage() {
 
   useEffect(() => {
     if (auth) navigate("/profile", { replace: true });
-  }, [auth, navigate]);
+    // getAuthSession() re-parses sessionStorage into a new object every
+    // call, so it's never referentially stable across renders — depend on
+    // the token itself (matches CallPage/RoomSetupPage's me?.id convention
+    // for the same reason with getParticipant()).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [auth?.sessionToken, navigate]);
 
   if (auth) return null; // avoid flashing landing content while the redirect above runs
 

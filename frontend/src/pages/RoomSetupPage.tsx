@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { AppShell } from "../components/AppShell";
 import { api } from "../lib/api";
+import { initials } from "../lib/initials";
 import { buildRoleSetupRows } from "../lib/roleSetup";
 import { getParticipant } from "../lib/session";
 import { templateName } from "../lib/templates";
@@ -170,8 +171,4 @@ function RoleSetupRow(props: {
       </div>
     </div>
   );
-}
-
-function initials(name: string) {
-  return name.split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]?.toUpperCase()).join("");
 }
