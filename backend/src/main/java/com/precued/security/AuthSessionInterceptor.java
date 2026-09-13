@@ -17,21 +17,26 @@ import java.util.Set;
 /**
  * Requires "Authorization: Bearer &lt;AuthSession token&gt;" (issued by
  * POST /api/auth/verify) resolving to a real, unexpired session, on the
- * paths this is registered for (see WebMvcConfig) — currently room creation
- * and room-participant join, the only two places a request-body field
- * (createdByUserId / userId) could otherwise claim a User identity with no
- * proof at all.
+ * paths this is registered for (see WebMvcConfig) — room creation,
+ * room-participant join, and (M-Templates) every /api/templates/** path,
+ * each a place a request either claims a User identity outright
+ * (createdByUserId / userId) or needs one to decide ownership (custom
+ * template create/list/role-builder), with no proof otherwise.
  *
- * The two paths don't behave identically: room creation always requires
+ * These paths don't all behave identically: room creation always requires
  * this token — createdByUserId no longer exists as a body field at all,
  * the User comes only from here (see RoomService#create). Room-participant
- * join is different: a guest join has no User and legitimately sends no
- * token, so this interceptor can't reject a missing header there — only
- * RoomParticipantService#join knows, once it's parsed the body's userId,
- * whether a token was actually required. What this interceptor guarantees
- * on BOTH paths is narrower but still real: if a token IS present, it must
- * resolve to a real, unexpired session, or the request is rejected right
- * here — a bad token is never silently treated as "no token."
+ * join and /api/templates/** are different: a guest join has no User and
+ * legitimately sends no token, and most of /api/templates/** (built-in
+ * template presets, reading a public template) needs no token at all — so
+ * this interceptor can't reject a missing header on those paths itself;
+ * only the service that actually needs a User (RoomParticipantService#join,
+ * TemplateService's create/listMine/addRole/removeRole) knows whether a
+ * token was actually required, once it's past this interceptor. What this
+ * interceptor guarantees on EVERY registered path is narrower but still
+ * real: if a token IS present, it must resolve to a real, unexpired
+ * session, or the request is rejected right here — a bad token is never
+ * silently treated as "no token."
  */
 @Component
 public class AuthSessionInterceptor implements HandlerInterceptor {

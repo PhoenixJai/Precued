@@ -72,6 +72,31 @@ export interface ParticipantRoleAssignment {
   revokedAt: string | null;
 }
 
+/**
+ * A built-in template (isCustom false) or a user-created one
+ * (M-Templates). A custom template's id is a generated string, not one of
+ * TemplateId's three literals — deliberately typed as plain string here
+ * rather than widening TemplateId, since using a custom template to
+ * actually create a Room is a separate, not-yet-built follow-up.
+ */
+export interface TemplateSummary {
+  id: string;
+  name: string;
+  isCustom: boolean;
+  createdAt: string;
+}
+
+export interface TemplateRoleDefinition {
+  id: string;
+  templateId: string;
+  roleKey: string;
+  name: string;
+  isHostRole: boolean;
+  isGuestRole: boolean;
+  maxMembers: number | null;
+  sortOrder: number;
+}
+
 export interface TemplatePreset {
   id: string;
   templateId: TemplateId;
