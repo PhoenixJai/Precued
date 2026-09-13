@@ -20,11 +20,6 @@ import java.util.List;
 import java.util.Locale;
 import java.util.UUID;
 
-/**
- * Host-facing Invite management. Invites reserve potential seats while they
- * are PENDING so a bounded RoomRole cannot accidentally have more outstanding
- * invite capacity than its maxMembers snapshot allows.
- */
 @Service
 public class InviteService {
 
@@ -143,6 +138,21 @@ public class InviteService {
         List<Invite> invites = inviteRepository.findByRoomId(roomId);
         invites.forEach(invite -> refreshStatus(invite, now));
         return invites;
+    }
+
+    @Transactional
+    public Invite expire(UUID roomId, UUID inviteId) {
+        requireHost(roomId);
+        Invite invite = inviteRepository.findById(inviteId)
+                .orElseThrow(() -> new IllegalArgumentException("No Invite with id " + inviteId));
+        if (!invite.getRoomRole().getRoom().getId().equals(roomId)) {
+            throw new IllegalStateException("Invite does not belong to this room");
+        }
+        if (invite.getStatus() == Invite.Status.USED) {
+            throw new IllegalStateException("A fully used invite cannot be expired retroactively");
+        }
+        invite.setStatus(Invite.Status.EXPIRED);
+        return inviteRepository.save(invite);
     }
 
     /** Public token preview used before a guest has a RoomParticipant session. */
