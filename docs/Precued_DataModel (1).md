@@ -1,295 +1,1265 @@
-# Precued MVP — Data Model (Sales Call · Mock Trial · LD Debate)
+# Precued — Data Model
 
-14 tables, one visibility engine (interface specified below — see "VisibilityEngine — Interface Spec"). Verticals (Sales Call, Mock Trial, LD Debate) are rows in `Template`/`TemplateRole`/`TemplatePreset` — no template-specific code anywhere in the schema.
+Current schema + planned optional Session Flow extension.
 
-## Design Decisions
+Precued is template-driven: Sales Call, Mock Trial, Lincoln-Douglas Debate, and user-created templates are configuration, not separate application architectures.
 
-1. **Roles are copied from Template into Room at creation, not referenced live.** A `RoomRole` is a snapshot of a `TemplateRole` at the moment the room was created. Editing a template later never corrupts a call already in progress.
-2. **Participant identity is stable across role changes.** A `RoomParticipant` is one person's membership in a room, for the room's whole lifetime. Their role is tracked separately in `ParticipantRoleAssignment`, which timestamps when a role starts and ends — so reassigning someone mid-call doesn't create a new identity or lose history.
-3. **A Share is a business concept, not a LiveKit track.** One share action (e.g. starting a screen share) can produce more than one track (video + audio). `Share` holds the policy; `ShareTrack` holds the actual track SID(s) underneath it.
-4. **Visibility is allow-list policy, compiled at runtime.** `ShareRoleGrant` stores which roles are permitted to see a share. No grant row = never subscribed — not hidden client-side, never sent. A single `VisibilityEngine` reads this policy and compiles it into live LiveKit participant/track permissions whenever a grant, role assignment, or share changes.
-5. **Slide-level visibility is a same-slide-for-everyone model, not per-participant navigation.** `Share.current_slide_index` is the one live presenter position all connected participants share. A role either sees that slide or gets the lock state — no participant has an independent slide position. `ShareRoleGrant.share_slide_id` is a nullable refinement of Decision #4's allow-list, not a new mechanism: `NULL` means whole-share grant (existing behavior), a set value means the grant applies only when that slide is current.
+**Current database:** 16 tables through migration V7.
 
-## Tables
+**Planned Session Flow extension:** 4 additional tables plus small additions to `Template`, `Room`, and potentially `RoomRole`.
 
-### User
+---
+
+## Model Status Legend
+
+- **CURRENT** — exists in the repository/database now.
+- **PLANNED** — approved near-future design; not yet implemented.
+- **PENDING ENFORCEMENT** — schema/model exists, but the full runtime behavior is not yet wired.
+
+---
+
+# Design Decisions
+
+## 1. Template configuration is snapshotted into a Room
+
+A live Room must not depend on mutable template configuration.
+
+Current role behavior:
+
+    TemplateRole → RoomRole
+
+When a Room is created, its TemplateRoles are copied into RoomRoles.
+
+Editing the template later must not change an existing Room.
+
+The same pattern will be used for Session Flow:
+
+    TemplateStage → RoomStage
+
+A Room therefore contains the runtime snapshot required to continue operating even if its source template is later edited.
+
+---
+
+## 2. Session Flow is optional
+
+**PLANNED**
+
+Not every Precued interaction requires formal stages.
+
+A Template may contain:
+
+- roles only;
+- roles + visibility behavior;
+- roles + visibility + Session Flow;
+- or increasingly sophisticated combinations later.
+
+`Template.session_flow_enabled` determines whether structured stage progression is enabled by default.
+
+Stage configuration may remain saved while Session Flow is disabled.
+
+At Room creation, the Template's setting is copied to:
+
+`Room.session_flow_enabled`
+
+This prevents later edits to the Template from changing an existing Room.
+
+The Room-level field also leaves room for a future per-session override.
+
+---
+
+## 3. A Stage does not inherently require a timer
+
+**PLANNED**
+
+A stage may be timed or untimed.
+
+`duration_seconds = NULL`
+
+means:
+
+> Untimed stage.
+
+Examples:
+
+- Defense Opening — 120 seconds
+- Judge Questions — untimed
+- Jury Deliberation — 600 seconds
+
+Timing is therefore an optional property of a Stage, not the definition of a Stage.
+
+---
+
+## 4. Runtime stage progression is manual in v1
+
+**PLANNED**
+
+The host explicitly starts Session Flow and advances between stages.
+
+A timer reaching zero does **not** automatically advance the Room.
+
+A timed stage remains `ACTIVE` after expiration until the host advances.
+
+Initial state:
+
+    PENDING → ACTIVE → COMPLETED
+
+v1 does not support:
+
+- automatic advancement;
+- branching;
+- arbitrary skipping;
+- going backward;
+- pause/resume;
+- conditional transitions.
+
+Those remain future workflow capabilities.
+
+---
+
+## 5. Participant identity is stable across role changes
+
+A `RoomParticipant` represents one person's membership in a Room for that Room's lifetime.
+
+Their current role is separate:
+
+    RoomParticipant
+        ↓
+    ParticipantRoleAssignment
+        ↓
+    RoomRole
+
+Changing a person's role revokes the old assignment and creates a new assignment rather than creating a new participant identity.
+
+This preserves role history.
+
+---
+
+## 6. A Share is a business concept, not a LiveKit track
+
+One Share action may produce multiple LiveKit tracks.
+
+For example, one screen share may publish:
+
+- a video track;
+- an audio track.
+
+`Share` contains the business/policy state.
+
+`ShareTrack` contains the actual LiveKit track SID records underneath it.
+
+---
+
+## 7. Visibility is an allow-list
+
+`ShareRoleGrant` defines which RoomRoles may receive shared content.
+
+No qualifying grant means the participant is not permitted to receive the Share.
+
+Precued does not rely on merely hiding unauthorized content after delivery.
+
+The `VisibilityEngine` computes permissions from Room state and pushes the resulting track-subscription permissions to the publisher's LiveKit client.
+
+---
+
+## 8. Slide visibility refines the same allow-list
+
+A presentation uses one presenter-controlled current slide:
+
+`Share.current_slide_index`
+
+Participants do not navigate independently.
+
+For a presentation Share, a role may have:
+
+- a whole-share grant: `share_slide_id IS NULL`; or
+- a slide-specific grant for the currently active `ShareSlide`.
+
+The participant either sees the presenter's current slide or sees the locked/unavailable state.
+
+---
+
+## 9. Runtime Session Flow uses Room state, not Template state
+
+**PLANNED**
+
+After Room creation, progression uses only:
+
+- `Room`
+- `RoomStage`
+- `RoomStageRole`
+- `RoomRole`
+
+The runtime engine does not need to re-read TemplateStage configuration to operate the live session.
+
+`source_template_stage_id` exists only for traceability.
+
+---
+
+## 10. At most one RoomStage may be active
+
+**PLANNED**
+
+A Room may have at most one:
+
+`RoomStage.status = ACTIVE`
+
+at a time.
+
+This should be protected by a Postgres partial unique index.
+
+Conceptually:
+
+    CREATE UNIQUE INDEX idx_room_stage_one_active
+        ON room_stage(room_id)
+        WHERE status = 'ACTIVE';
+
+The application therefore does not need a duplicated `Room.current_stage_id` field.
+
+The active stage is derived directly from RoomStage state.
+
+---
+
+# CURRENT TABLES
+
+# Identity / Authentication
+
+## User (`app_user`)
+
 | Field | Type | Notes |
 |---|---|---|
 | id | uuid | PK |
 | email | string | unique |
 | display_name | string | |
+| password_hash | string \| null | bcrypt/encoded account password; nullable for older/magic-link-created users |
 | created_at | timestamp | |
 
-### Template
+Account holders currently use email/password signup and login.
+
+---
+
+## AuthSession
+
 | Field | Type | Notes |
 |---|---|---|
-| id | string | PK — `sales_call` \| `mock_trial` \| `ld_debate` |
-| name | string | display label |
-| created_at | timestamp | hardcoded seed data for MVP, no versioning |
+| id | uuid | PK |
+| user_id | fk → User | |
+| token | string | unique opaque bearer token |
+| created_at | timestamp | |
+| expires_at | timestamp | |
 
-### TemplateRole
+Both successful password authentication and magic-link verification issue an `AuthSession`.
+
+This is the authenticated account session used by account-scoped APIs such as Room creation and custom Template ownership.
+
+---
+
+## MagicLinkToken
+
+| Field | Type | Notes |
+|---|---|---|
+| id | uuid | PK |
+| email | string | |
+| token | string | unique, single-use bearer credential |
+| created_at | timestamp | |
+| expires_at | timestamp | |
+| used_at | timestamp \| null | null until successfully consumed |
+
+Magic-link support still exists alongside account/password authentication.
+
+---
+
+# Config-Time Template Model
+
+## Template
+
+| Field | Type | Notes |
+|---|---|---|
+| id | string | PK. Built-ins use stable slugs such as `sales_call`, `mock_trial`, `ld_debate`; custom templates currently use generated UUID strings |
+| name | string | display label |
+| created_by_user_id | fk → User \| null | `NULL` = built-in template; non-null = private custom template owned by that User |
+| session_flow_enabled | bool | **PLANNED**, default false for new custom templates |
+| created_at | timestamp | |
+
+### Template ownership
+
+Built-in templates:
+
+    created_by_user_id = NULL
+
+They are public/read-only configuration.
+
+Custom templates:
+
+    created_by_user_id = <owner User>
+
+They are private-by-default and mutable only by their creator.
+
+Custom Template + custom role creation already exists.
+
+Before custom Templates are exposed as launchable Rooms everywhere, `RoomService#create` must apply the same ownership/visibility rule as `TemplateService`; it currently loads the Template directly by ID.
+
+---
+
+## TemplateRole
+
 | Field | Type | Notes |
 |---|---|---|
 | id | uuid | PK |
 | template_id | fk → Template | |
-| role_key | string | e.g. `judge`, `jury` |
+| role_key | string | stable key, e.g. `judge`, `jury`, `client` |
 | name | string | display label |
-| is_host_role | bool | who runs the room by default |
-| is_guest_role | bool | default `false`. Descriptive/UI-hint only — no runtime logic change (`ShareRoleGrant` already defaults to no-visibility for every role regardless of this flag) |
-| max_members | int \| null | null = unlimited (e.g. Jury, Audience) |
-| sort_order | int | |
+| is_host_role | bool | host/facilitator role |
+| is_guest_role | bool | default false; descriptive/UI hint |
+| max_members | int \| null | null = unlimited |
+| sort_order | int | display/order position |
 
-### TemplatePreset
+Current custom-template behavior allows creators to define roles.
+
+A custom Template may contain only one host role.
+
+### Planned RoomRole consistency change
+
+If `is_guest_role` is intended to remain visible in runtime role-assignment UI, it should also be copied into `RoomRole` when the Room is created.
+
+---
+
+## TemplatePreset
+
 | Field | Type | Notes |
 |---|---|---|
 | id | uuid | PK |
 | template_id | fk → Template | |
-| name | string | e.g. "Judge + Jury Only" |
+| name | string | e.g. `Judge + Jury Only` |
 | sort_order | int | |
 
-### TemplatePresetRole
-*(join: which TemplateRoles a preset grants)*
+---
+
+## TemplatePresetRole
+
+Join table defining which TemplateRoles belong to a TemplatePreset.
+
 | Field | Type | Notes |
 |---|---|---|
 | preset_id | fk → TemplatePreset | composite PK |
 | template_role_id | fk → TemplateRole | composite PK |
 
-### Room
+---
+
+# Runtime Room Model
+
+## Room
+
 | Field | Type | Notes |
 |---|---|---|
 | id | uuid | PK |
-| template_id | fk → Template | which vertical this call uses |
-| created_by_user_id | fk → User | |
-| livekit_room_name | string | unique, maps to LiveKit SFU room |
-| status | enum | `created` \| `active` \| `ended` |
-| host_disconnect_policy | enum | `end_call` \| `persist_indefinitely` \| `persist_for_duration` — default `end_call`; host sets at room creation |
-| host_disconnect_grace_seconds | int \| null | only meaningful when policy is `persist_for_duration` |
+| template_id | fk → Template | source Template |
+| created_by_user_id | fk → User | Room creator |
+| livekit_room_name | string | unique |
+| status | enum | `CREATED` \| `ACTIVE` \| `ENDED` |
+| host_disconnect_policy | enum | `END_CALL` \| `PERSIST_INDEFINITELY` \| `PERSIST_FOR_DURATION` |
+| host_disconnect_grace_seconds | int \| null | meaningful only for `PERSIST_FOR_DURATION` |
+| session_flow_enabled | bool | **PLANNED**, copied from Template at Room creation |
 | created_at | timestamp | |
 | ended_at | timestamp \| null | |
 
-### RoomRole
-*(copied from TemplateRole when Room is created — this is Decision #1)*
-| Field | Type | Notes |
-|---|---|---|
-| id | uuid | PK |
-| room_id | fk → Room | |
-| source_template_role_id | fk → TemplateRole \| null | traceability only, not a live reference |
-| role_key | string | copied at creation time |
-| name | string | copied at creation time |
-| is_host_role | bool | copied at creation time |
-| max_members | int \| null | copied at creation time |
+### Host-disconnect implementation status
 
-### RoomParticipant
-*(a person's stable membership in a room — this is Decision #2)*
+`host_disconnect_policy` and `host_disconnect_grace_seconds` exist in the schema/model.
+
+**PENDING ENFORCEMENT:** the current LiveKit `participant_left` webhook does not yet implement the full host-disconnect policy state machine.
+
+---
+
+## RoomRole
+
+Snapshot of a TemplateRole.
+
 | Field | Type | Notes |
 |---|---|---|
 | id | uuid | PK |
 | room_id | fk → Room | |
-| user_id | fk → User \| null | nullable for guest joins (e.g. a client with no account) |
-| livekit_identity | string | unique per room, stable across reconnects |
+| source_template_role_id | fk → TemplateRole \| null | traceability only |
+| role_key | string | copied at Room creation |
+| name | string | copied at Room creation |
+| is_host_role | bool | copied at Room creation |
+| is_guest_role | bool | **PLANNED consistency addition** if runtime UI needs the TemplateRole hint |
+| max_members | int \| null | copied at Room creation |
+
+### Snapshot FK cleanup
+
+The model says `source_template_role_id` is traceability-only.
+
+To make the database actually honor that contract, the FK should use:
+
+    ON DELETE SET NULL
+
+Deleting/editing the source TemplateRole must never corrupt or delete a RoomRole snapshot.
+
+---
+
+## Invite
+
+Invite schema exists as the planned pre-assignment layer.
+
+| Field | Type | Notes |
+|---|---|---|
+| id | uuid | PK |
+| room_role_id | fk → RoomRole | role granted by the invite |
+| invitee_email | string \| null | named invite if set; null for pool/open link |
+| token | string | unique |
+| mode | enum | `NAMED` \| `POOL` |
+| max_uses | int | usage cap |
+| uses_count | int | successful uses |
+| status | enum | `PENDING` \| `USED` \| `EXPIRED` |
+| created_at | timestamp | |
+| expires_at | timestamp \| null | |
+
+**PENDING ENFORCEMENT / PRODUCT FLOW:** the table and repository exist, but the full invite issuance/consumption/expiration workflow is not yet wired into the current frontend/runtime join path.
+
+A future invite-consumption implementation may add:
+
+`ParticipantRoleAssignment.source_invite_id`
+
+if Precued wants durable historical traceability from an assignment back to the Invite that created it.
+
+---
+
+## RoomParticipant
+
+A person's stable membership in a Room.
+
+| Field | Type | Notes |
+|---|---|---|
+| id | uuid | PK |
+| room_id | fk → Room | |
+| user_id | fk → User \| null | nullable for guest participants |
+| livekit_identity | string | unique within Room |
 | display_name | string | |
-| access_level | enum | `host` \| `member` — administrative control, separate from content role |
+| access_level | enum | `HOST` \| `MEMBER` — administrative access, separate from content role |
 | joined_at | timestamp | |
-| left_at | timestamp \| null | |
+| left_at | timestamp \| null | null while considered connected |
+| session_token | string \| null | opaque participant-session bearer token; application code issues one for current joins |
 
-### ParticipantRoleAssignment
-*(which RoomRole a RoomParticipant currently holds, with history)*
+The participant session token protects Room/participant-scoped APIs independently of account-level `AuthSession`.
+
+---
+
+## ParticipantRoleAssignment
+
+Tracks which RoomRole a RoomParticipant holds over time.
+
 | Field | Type | Notes |
 |---|---|---|
 | id | uuid | PK |
 | room_participant_id | fk → RoomParticipant | |
 | room_role_id | fk → RoomRole | |
 | assigned_at | timestamp | |
-| revoked_at | timestamp \| null | null = currently active |
+| revoked_at | timestamp \| null | null = active |
 
-MVP rule: at most one active (`revoked_at IS NULL`) assignment per participant at a time.
+MVP invariant:
 
-### Invite
-*(pre-assignment layer — a token that resolves to a RoomRole; consuming it creates a ParticipantRoleAssignment)*
-| Field | Type | Notes |
-|---|---|---|
-| id | uuid | PK |
-| room_role_id | fk → RoomRole | which role this invite grants on consumption |
-| invitee_email | string \| null | set for named invites sent to a specific person; null for open pool links |
-| token | string | unique, resolves to `room_role_id` |
-| mode | enum | `named` \| `pool` |
-| max_uses | int | `named` → 1; `pool` → `RoomRole.max_members` or host-set cap if null |
-| uses_count | int | increments on each successful join via this token |
-| status | enum | `PENDING` \| `USED` \| `EXPIRED` |
-| created_at | timestamp | |
-| expires_at | timestamp \| null | |
+> At most one active assignment per RoomParticipant.
 
-MVP rule: `status` flips `PENDING → USED` when `uses_count` reaches `max_uses`, applied synchronously on the consuming write. `status` flips `PENDING → EXPIRED` via a background job that scans for `status = PENDING AND expires_at < now()` on a schedule (not checked lazily at join-attempt time) — so `status` is always accurate for any reader (host-facing invite lists, join attempts) without each caller needing to separately check `expires_at`. Reassigning a participant's role later via `ParticipantRoleAssignment` does not modify or revoke the originating `Invite` row — the two are decoupled once consumed.
+Implemented through a Postgres partial unique index over:
 
-### Share
-*(business concept — one instance of the host sharing something)*
+`room_participant_id WHERE revoked_at IS NULL`
+
+A participant temporarily holding no active assignment fails closed for Share visibility.
+
+---
+
+# Share / Visibility Model
+
+## Share
+
+One logical sharing action.
+
 | Field | Type | Notes |
 |---|---|---|
 | id | uuid | PK |
 | room_id | fk → Room | |
-| publisher_participant_id | fk → RoomParticipant | must hold a host role |
-| applied_preset_id | fk → TemplatePreset \| null | which preset the host picked, for reference |
-| label | string | host-entered, e.g. "Exhibit A" |
-| kind | enum | `screen` \| `presentation` — **NEW**: `presentation` added for slide-based Shares (Chunk 1). Existing `screen` Shares are unaffected by anything below. |
-| status | enum | `active` \| `ended` |
-| current_slide_index | int | **NEW**, default `0`. Only meaningful when `kind = presentation` — the presenter's single live slide position; all connected participants are evaluated against this one value, not an individual position each (Decision #5). |
+| publisher_participant_id | fk → RoomParticipant | current implementation requires publisher to hold host role |
+| applied_preset_id | fk → TemplatePreset \| null | reference to selected preset |
+| label | string | e.g. `Exhibit A` |
+| kind | enum | `SCREEN` \| `PRESENTATION` |
+| status | enum | `ACTIVE` \| `ENDED` |
+| current_slide_index | int | default 0; meaningful for `PRESENTATION` |
 | started_at | timestamp | |
 | ended_at | timestamp \| null | |
 
-MVP rule: if the `RoomParticipant` holding `publisher_participant_id` for an active `Share` disconnects, that `Share` transitions to `status = ended` and every one of its `ShareTrack` rows gets `unpublished_at` set. No orphaned "active" Share persists after its publisher leaves, and there is no auto-reassign to a different host-role participant — a new `Share` must be explicitly started to resume.
+### Publisher disconnect rule
 
-### ShareSlide
-*(**NEW** — one slide belonging to a `presentation`-kind Share; introduced in Chunk 1)*
+Intended rule:
+
+> If the publisher disconnects, the active Share should end and its active ShareTracks should receive `unpublished_at`.
+
+**PENDING ENFORCEMENT:** the current `participant_left` webhook marks the RoomParticipant as left and recomputes visibility, but does not yet automatically transition all Shares published by that participant to `ENDED`.
+
+Explicit host-driven Share ending is implemented.
+
+---
+
+## ShareSlide
+
+One visual slide belonging to a `PRESENTATION` Share.
+
 | Field | Type | Notes |
 |---|---|---|
 | id | uuid | PK |
-| share_id | fk → Share | parent Share; only populated for `kind = presentation` |
-| slide_index | int | unique per `share_id` — ordering position, matched against `Share.current_slide_index` |
-| image_url | string \| null | nullable in Chunk 1 (schema only, no real content); populated by the import pipeline in a later chunk |
+| share_id | fk → Share | |
+| slide_index | int | unique within Share |
+| image_url | string \| null | storage key/path for rendered slide image |
 | created_at | timestamp | |
 
-No rows exist for `screen`-kind Shares. This table has zero relationship to `ShareTrack` — a `presentation` Share's actual LiveKit media (if any, e.g. presenter audio) is still tracked via `ShareTrack` exactly as today; `ShareSlide` only carries the visual slide content and its per-slide visibility hook.
+Current PDF presentation upload renders pages into images, stores them, and creates ShareSlide rows.
 
-### ShareTrack
-*(actual LiveKit track(s) under a Share — this is Decision #3)*
+No ShareSlide rows exist for normal screen Shares.
+
+---
+
+## ShareTrack
+
+LiveKit tracks underneath a Share.
+
 | Field | Type | Notes |
 |---|---|---|
 | id | uuid | PK |
 | share_id | fk → Share | |
 | livekit_track_sid | string | unique |
-| kind | enum | `video` \| `audio` |
+| kind | enum | `VIDEO` \| `AUDIO` |
 | published_at | timestamp | |
 | unpublished_at | timestamp \| null | |
 
-### ShareRoleGrant
-*(the allow-list — this is Decision #4, extended by Decision #5)*
+---
+
+## ShareRoleGrant
+
+Allow-list policy.
+
 | Field | Type | Notes |
 |---|---|---|
 | id | uuid | PK |
 | share_id | fk → Share | |
-| room_role_id | fk → RoomRole | a role permitted to view this share |
-| share_slide_id | fk → ShareSlide \| null | **NEW**, nullable. `NULL` = whole-share grant, unaffected existing behavior. A set value scopes this grant to only that slide being current — see extended Runtime Rule below. |
+| room_role_id | fk → RoomRole | |
+| share_slide_id | fk → ShareSlide \| null | null = whole-share grant; set = slide-specific grant |
 | granted_at | timestamp | |
-| revoked_at | timestamp \| null | null = currently active |
+| revoked_at | timestamp \| null | null = active |
 
-## Runtime Rule
+---
 
-A `RoomParticipant` receives a `Share`'s tracks **iff** their currently active `ParticipantRoleAssignment` points to a `RoomRole` that has an active `ShareRoleGrant` for that `Share`. No grant means the track is never subscribed — not hidden after delivery.
+# Current Visibility Rule
 
-**Extended for slide-level visibility (Chunk 1):** for a `presentation`-kind Share, a role sees the current slide **iff** it holds an active `ShareRoleGrant` with `share_slide_id IS NULL` (whole-share grant — existing behavior, unaffected) **OR** an active `ShareRoleGrant` with `share_slide_id` matching the `ShareSlide` row at `Share.current_slide_index`. A role with only slide-specific grants sees the lock state on any slide those grants don't cover. `screen`-kind Shares never populate `share_slide_id`, so this extension changes nothing for them.
+A connected RoomParticipant receives a Share's permitted tracks iff:
 
-## VisibilityEngine — Interface Spec
+1. the participant has an active `ParticipantRoleAssignment`;
+2. that assignment points to a RoomRole;
+3. that RoomRole has a qualifying active ShareRoleGrant.
 
-### Why this isn't a single backend call
+No qualifying grant means access is denied.
 
-LiveKit's server SDK (`RoomServiceClient.updateParticipant`) can only set a coarse, room-wide `canSubscribe: bool` per participant — it cannot say "participant X may see track Y but not track Z" when X is otherwise allowed to subscribe. Fine-grained per-track, per-viewer permission is only settable via `LocalParticipant.setTrackSubscriptionPermissions(allParticipantsAllowed: false, participantTrackPermissions: [...])`, called **client-side by the publisher** (the person doing the sharing), not by our backend directly against LiveKit.
+For `SCREEN` Shares:
 
-Consequence: the VisibilityEngine is **backend compute + a required push to the publisher's client**, not a pure backend service. The publisher's client is the one that actually calls into LiveKit. If that client is disconnected, backgrounded, or slow, permission changes don't take effect until it reconnects/resumes — this is a real dependency, not an edge case to hand-wave.
+> any active grant for the participant's RoomRole qualifies.
 
-### Architecture: two parts
+For `PRESENTATION` Shares:
 
-**Part A — Compute (backend, pure function of DB state)**
+> a role qualifies if it has either an active whole-share grant (`share_slide_id IS NULL`) or an active grant matching the ShareSlide at `Share.current_slide_index`.
 
-```
-compute_grants_for_share(share_id) -> List[ParticipantTrackPermission]
+A participant with only slide-specific grants receives the locked state on slides outside those grants.
 
-Input:  share_id
-Reads:  Share.room_id
-        → Share.kind, Share.current_slide_index (if kind = presentation)
-        → all RoomParticipants in that room with connection state = connected
-        → each participant's currently active ParticipantRoleAssignment (revoked_at IS NULL)
-        → active ShareRoleGrants (revoked_at IS NULL) for this share_id,
-          each evaluated against share_slide_id per the extended Runtime Rule
-        → ShareTracks under this share (video/audio track SIDs)
-Output: one entry per connected RoomParticipant:
-        {
-          livekit_identity: string,
-          allowed: bool,        // true iff their active role has a qualifying grant (whole-share, or matching current slide)
-          track_sids: [string]  // this Share's ShareTrack.livekit_track_sid values, only if allowed
-        }
-```
+---
 
-Pure DB read + boolean join, matching the Runtime Rule above (including its slide-level extension). No LiveKit call happens here. This is safely callable as often as needed and is idempotent — same DB state in, same permission list out.
+# VisibilityEngine — Current Architecture
 
-**Part B — Push to publisher + apply (backend → publisher's client → LiveKit)**
+Precued's fine-grained visibility cannot be implemented solely with the backend's coarse room-wide LiveKit subscription flag.
 
-**Transport decision: LiveKit data message, `RELIABLE` mode, targeted at the publisher's `participant_identity`.** Considered against a custom app-level websocket; rejected the websocket because the publisher's client is *already* connected to LiveKit by definition (they're the one publishing the Share) — a second connection would mean two independently-failing channels to reason about instead of one, for no benefit here (we're not planning to swap out LiveKit).
+The VisibilityEngine therefore has two responsibilities:
 
-**This is not "fire and forget."** LiveKit's own docs are explicit that reliable delivery is best-effort, not guaranteed: a receiver that is temporarily disconnected at the moment the packet is sent will not receive it, and packets are not buffered server-side beyond a limited number of retransmissions. There's also a documented edge case where a participant that has *just* connected can miss a reliable message sent immediately after the `participant_joined` event, because the transport isn't fully ready yet. Net effect: if the publisher's client is briefly down or mid-reconnect when we push, that update is simply gone — LiveKit will not queue and retry it for us later.
+## Compute
 
-Because `compute_grants_for_share` is a pure, idempotent function of DB state (Part A), we don't need our own message queue/retry system to compensate — we only need to guarantee we **re-push current state whenever the publisher (re)connects**, which is already a row in the trigger table below.
+`computeGrantsForShare(shareId)` evaluates:
 
-```
-1. Backend calls compute_grants_for_share(share_id) → permission list
-2. Backend sends the list to the Share's publisher_participant_id's client
-   via a LiveKit data message (RELIABLE mode, targeted at that one
-   participant_identity — not room-wide)
-3. Publisher's client SDK calls:
-     room.localParticipant.setTrackSubscriptionPermissions(
-       false,                        // allParticipantsAllowed = false always
-       participantTrackPermissions   // the list from step 1, translated to SDK shape
-     )
-4. LiveKit SFU stops/starts delivering the track(s) per the new list
-```
+- the Share;
+- active ShareTracks;
+- RoomParticipants where `left_at IS NULL`;
+- each participant's active ParticipantRoleAssignment;
+- active ShareRoleGrants;
+- current slide state for presentations.
 
-`allParticipantsAllowed` is always `false` — we never rely on LiveKit's default-allow; every viewer's access is explicit, matching Decision #4 ("no grant row = never subscribed").
+It produces viewer identities and the Share track SIDs each viewer is allowed to receive.
 
-### Triggers (event-driven — not poll, not recompute-on-read)
+The current implementation also computes a **publisher-wide union** across all active Shares from the same publisher before permissions are pushed.
 
-Poll is wrong: needless latency/cost tradeoff with no benefit here. Recompute-on-read is wrong: there is no "read" moment in push media — permissions must be correct *before* a track reaches the wire, not when someone happens to check.
+This is necessary because LiveKit's publisher-side subscription-permission call represents the publisher's overall permission set rather than one independent permission object per Precued Share.
 
-The engine runs Part A+B whenever one of these fires:
+Base camera/microphone track SIDs are fetched from LiveKit and unioned into the publisher's permission set so normal call media remains available independently of Share visibility.
 
-| Trigger | Source | Scope of recompute |
+## Push
+
+The backend sends the computed permission payload to the Share publisher using a targeted LiveKit reliable data message.
+
+The publisher's client applies:
+
+    room.localParticipant.setTrackSubscriptionPermissions(...)
+
+Precued always uses explicit participant/track permission state rather than relying on default-allow for protected Shares.
+
+Because LiveKit reliable data delivery is not a durable message queue, Precued re-pushes current permission state when a publisher reconnects.
+
+---
+
+# VisibilityEngine Triggers
+
+Recompute/push currently occurs for events including:
+
+| Trigger | Scope |
+|---|---|
+| ParticipantRoleAssignment create/revoke | active Shares in Room |
+| ShareRoleGrant create/revoke | affected publisher/Share |
+| Share started | new Share |
+| Share.current_slide_index changed | affected presentation Share |
+| LiveKit participant joined | Room; publisher reconnects receive explicit re-push |
+| LiveKit participant left | Room |
+| LiveKit track published | associated Share |
+| LiveKit track unpublished | associated Share |
+
+The engine remains event-driven rather than polling media state.
+
+---
+
+# PLANNED — Optional Session Flow
+
+Session Flow adds the third major Template dimension:
+
+    WHO  → Roles
+    WHAT → Visibility / content access
+    WHEN → Session Flow
+
+It is optional.
+
+A Template without Session Flow continues to behave exactly like Precued does today.
+
+---
+
+## Template.session_flow_enabled
+
+**PLANNED field**
+
+| Field | Type | Notes |
 |---|---|---|
-| `ParticipantRoleAssignment` created or revoked | our DB write (role reassignment) | every active Share in that room |
-| `ShareRoleGrant` created or revoked | our DB write (host changes visibility) | that one Share |
-| `Share` started | our DB write | that one Share (fresh compute, no prior state) |
-| `Share` ended | our DB write | none — tracks unpublished, permissions moot |
-| `Share.current_slide_index` changed | our DB write (host advances/rewinds a slide) — **NEW**, Chunk 1 | that one Share only (same pattern as the `ShareRoleGrant` row above, just keyed off a different write path) |
-| LiveKit webhook `participant_joined` | LiveKit → our webhook endpoint | every active Share in that room, for that one participant |
-| LiveKit webhook `participant_left` | LiveKit → our webhook endpoint | every active Share in that room (drop them from the list) |
-| LiveKit webhook `track_published` | LiveKit → our webhook endpoint | the Share that ShareTrack belongs to (attach new track_sid to existing grants) |
-| LiveKit webhook `participant_joined`, **specifically for a Share's own publisher reconnecting** | LiveKit → our webhook endpoint | re-push (not just recompute) current state for every active Share that participant publishes — covers the "message sent while they were briefly disconnected" gap, since Part A/B is idempotent and safe to re-run |
+| session_flow_enabled | bool | default false; enables structured stage progression by default |
 
-Each row above is a discrete, already-observable event — no new infrastructure needed beyond a webhook receiver we need anyway for `Room`/`Share` lifecycle bookkeeping. The last row is not a new webhook type — it's the same `participant_joined` event, with the added rule that if the (re)connecting participant is a `publisher_participant_id` on any active `Share`, we re-push rather than assume our last push landed.
+A Template may retain TemplateStage rows while this flag is false.
 
-### Failure / race handling — fail closed per participant, not per room
+This lets a creator temporarily disable structured progression without deleting their configuration.
 
-Two options considered:
-- **Defer to original role until resolved** — rejected: stale-permissive. A participant who was just revoked keeps seeing content during the gap.
-- **Revoke all grants for the room until resolved** — rejected as default: safe, but the blast radius is wrong. One participant's mid-reassignment ambiguity shouldn't blank the share for everyone else mid-demo.
+---
 
-**Adopted: fail closed, scoped to the ambiguous participant only.**
+## TemplateStage
 
-- A `RoomParticipant` with **no currently active `ParticipantRoleAssignment`** (the gap between a revoke and the next assign, however short) is treated identically to holding a role with zero grants — i.e., `allowed: false` for every Share, for that participant only.
-- This requires no new schema. It falls directly out of the existing Runtime Rule (`revoked_at IS NULL` join) **provided reassignment is implemented as two separate writes — revoke old, then assign new — with Part A+B re-run after each write**, not as a single atomic "swap" that skips the gap.
-- Practically: revoking triggers a recompute that drops that participant from every active Share's allowed list; assigning triggers a second recompute that (if the new role has grants) adds them back. Everyone else's already-confirmed permissions are untouched by either write.
+**PLANNED NEW TABLE**
 
-This gives the security property of "revoke all" (never permissive during ambiguity) with the blast radius of "per participant" (doesn't visibly disrupt the rest of the room).
+Defines a reusable stage in a Template.
 
-## MVP Template Configs
+| Field | Type | Notes |
+|---|---|---|
+| id | uuid | PK |
+| template_id | fk → Template | |
+| stage_key | string | stable machine key, e.g. `defense_opening` |
+| name | string | display label |
+| sort_order | int | progression order |
+| duration_seconds | int \| null | null = untimed |
 
-### Sales Call
-Roles: **Sales Rep** (host) · Sales Engineer · Client
-Presets: All Roles · Rep + Engineer Only · Rep Only
+Recommended constraints:
 
-### Mock Trial
-Roles: **Judge** (host) · Jury (multi-member) · Defense · Prosecution
-Presets: All Roles · Judge + Jury Only · Judge Only · Defense Only · Prosecution Only
+    UNIQUE(template_id, stage_key)
+    UNIQUE(template_id, sort_order)
 
-### Lincoln-Douglas Debate
-Roles: **Judge** (host) · Affirmative · Negative · Audience (multi-member)
-Presets: All Roles · Judge Only · Affirmative Only · Negative Only
+and:
 
-Adding a fourth template later means adding rows to `Template`/`TemplateRole`/`TemplatePreset`/`TemplatePresetRole` — zero changes to Room, Share, or the VisibilityEngine.
+    duration_seconds IS NULL OR duration_seconds > 0
 
-## Presentations Feature — Chunk Status
+A TemplateStage may have zero, one, or multiple active roles.
 
-Slide-level visibility is being built in sequenced chunks (see project decomposition). This document reflects **Chunk 1 (schema + Runtime Rule extension) only**:
+Zero-role stages remain useful for concepts such as intermission or general transition periods.
 
-- ✅ Chunk 1 — `Share.kind`/`current_slide_index`, `ShareSlide`, `ShareRoleGrant.share_slide_id`, extended Runtime Rule, new trigger row. Reflected above.
-- ⬜ Chunk 2 — PDF import pipeline populates `ShareSlide.image_url` with real content. Not yet reflected; `image_url` remains nullable/placeholder until this lands.
-- ⬜ Chunk 3 — Presenter/viewer UI for slide navigation and per-slide visibility controls.
-- ⬜ Chunk 4 — PPTX import (via PDF conversion).
-- ⬜ Parked — native slide creation/editor. Not scoped; revisit only after Chunks 1–3 are live and validated.
+---
+
+## TemplateStageRole
+
+**PLANNED NEW TABLE**
+
+Join table defining which roles have the floor / are active during a stage.
+
+| Field | Type | Notes |
+|---|---|---|
+| template_stage_id | fk → TemplateStage | composite PK |
+| template_role_id | fk → TemplateRole | composite PK |
+
+This relationship is descriptive session structure in v1.
+
+It does **not** automatically mute every other role or modify LiveKit publication permissions.
+
+Those behaviors may become separate stage actions later.
+
+If a custom TemplateRole is referenced by a TemplateStage, deleting the role should be rejected until the creator removes or changes its stage references.
+
+---
+
+## Room.session_flow_enabled
+
+**PLANNED field**
+
+| Field | Type | Notes |
+|---|---|---|
+| session_flow_enabled | bool | copied from Template at Room creation |
+
+This is the Room's independent runtime setting.
+
+Later, Room creation UI may allow the host to override the Template default for one session.
+
+---
+
+## RoomStage
+
+**PLANNED NEW TABLE**
+
+Runtime snapshot of TemplateStage.
+
+| Field | Type | Notes |
+|---|---|---|
+| id | uuid | PK |
+| room_id | fk → Room | |
+| source_template_stage_id | fk → TemplateStage \| null | traceability only; use `ON DELETE SET NULL` |
+| stage_key | string | copied |
+| name | string | copied |
+| sort_order | int | copied |
+| duration_seconds | int \| null | copied |
+| status | enum | `PENDING` \| `ACTIVE` \| `COMPLETED` |
+| started_at | timestamp \| null | set when stage becomes active |
+| completed_at | timestamp \| null | set when host advances |
+
+Recommended constraints:
+
+    UNIQUE(room_id, stage_key)
+    UNIQUE(room_id, sort_order)
+
+and:
+
+    CREATE UNIQUE INDEX idx_room_stage_one_active
+        ON room_stage(room_id)
+        WHERE status = 'ACTIVE';
+
+No `Room.current_stage_id` is required.
+
+---
+
+## RoomStageRole
+
+**PLANNED NEW TABLE**
+
+Runtime snapshot of TemplateStageRole.
+
+| Field | Type | Notes |
+|---|---|---|
+| room_stage_id | fk → RoomStage | composite PK |
+| room_role_id | fk → RoomRole | composite PK |
+
+At Room creation:
+
+    TemplateRole.id → RoomRole.id
+
+is mapped first.
+
+Then each TemplateStageRole is translated into the matching RoomStageRole relationship.
+
+Runtime Session Flow never needs to depend on TemplateRole.
+
+---
+
+# Session Flow Snapshot Behavior
+
+When a Room is created:
+
+1. create Room;
+2. copy `Template.session_flow_enabled` → `Room.session_flow_enabled`;
+3. copy TemplateRoles → RoomRoles;
+4. create a TemplateRole → RoomRole mapping;
+5. copy TemplateStages → RoomStages;
+6. copy TemplateStageRoles → RoomStageRoles using the role mapping;
+7. leave all RoomStages `PENDING`.
+
+Stages may be snapshotted even when Session Flow is disabled.
+
+That preserves the configured flow while allowing the Room-level setting to determine whether it is used.
+
+---
+
+# Session Flow Runtime Behavior — v1
+
+If Session Flow is disabled:
+
+    no stage is activated
+
+and the Room behaves like the current Precued experience.
+
+If enabled, the host starts the flow.
+
+Example initial state:
+
+    Prosecution Opening     PENDING
+    Defense Opening         PENDING
+    Judge Questions         PENDING
+
+Host presses **Start Session Flow**:
+
+    Prosecution Opening     ACTIVE
+    Defense Opening         PENDING
+    Judge Questions         PENDING
+
+The ACTIVE stage receives:
+
+`started_at = server time`
+
+When the host presses **Next Stage**, one transaction performs:
+
+    current ACTIVE stage → COMPLETED
+    completed_at = now
+
+and:
+
+    next PENDING stage → ACTIVE
+    started_at = now
+
+After the final stage completes:
+
+- no RoomStage remains ACTIVE;
+- all stages are COMPLETED.
+
+---
+
+# Session Flow Timer Rule
+
+A countdown is derived rather than written every second.
+
+For:
+
+    duration_seconds = 120
+    started_at = 10:00:00
+
+deadline is:
+
+    10:02:00
+
+Clients calculate the displayed countdown from authoritative server timestamps.
+
+Refreshing or reconnecting therefore does not reset the timer.
+
+At or after the deadline the UI displays:
+
+    TIME EXPIRED
+
+but the RoomStage remains:
+
+    ACTIVE
+
+until the host manually advances.
+
+---
+
+# Derived Session Flow Status
+
+A future Session Flow API may derive the overall state as:
+
+| Status | Meaning |
+|---|---|
+| `DISABLED` | `Room.session_flow_enabled = false` |
+| `NOT_CONFIGURED` | enabled but Room has zero RoomStages |
+| `NOT_STARTED` | stages exist, none completed/active |
+| `IN_PROGRESS` | exactly one RoomStage is ACTIVE |
+| `COMPLETED` | all RoomStages are COMPLETED |
+
+No additional Room flow-status column is required for v1.
+
+---
+
+# Session Flow Example — Mock Trial
+
+One Precued-created Mock Trial Template could define:
+
+| Order | Stage | Active Role(s) | Duration |
+|---:|---|---|---:|
+| 1 | Prosecution Opening | Prosecution | 2 min |
+| 2 | Defense Opening | Defense | 2 min |
+| 3 | Judge Questions | Judge | Untimed |
+| 4 | Evidence Review | Judge, Defense, Prosecution | Untimed |
+| 5 | Prosecution Closing | Prosecution | 2 min |
+| 6 | Defense Closing | Defense | 2 min |
+| 7 | Jury Deliberation | Jury | 5 min |
+| 8 | Verdict | Judge, Jury | Untimed |
+
+This is Precued configuration, not Mock-Trial-specific application code.
+
+A creator can construct a different flow for a different Template.
+
+---
+
+# Session Flow v1 Non-Goals
+
+The first implementation intentionally does not include:
+
+- auto-advance when a timer reaches zero;
+- pause/resume;
+- add-time controls;
+- backward progression;
+- arbitrary stage skipping;
+- branching;
+- conditional logic;
+- automatic microphone muting;
+- automatic breakout rooms;
+- stage-triggered ShareRoleGrant mutations;
+- stage-triggered slide changes;
+- generic IF/THEN rule JSON;
+- voting or scoring.
+
+The goal of v1 is to prove:
+
+> Precued can guide participants through a reusable structured live interaction.
+
+---
+
+# Future Stage Actions
+
+After Session Flow v1 is proven, a Stage may eventually gain actions.
+
+Example:
+
+    WHEN Evidence Review becomes ACTIVE
+    THEN reveal Exhibit A to Judge, Defense, and Prosecution
+
+or:
+
+    WHEN Jury Deliberation becomes ACTIVE
+    THEN reveal Jury Instructions to Jury
+
+At that point Precued's core building blocks compose as:
+
+    WHO
+    RoomRole
+
+    +
+
+    WHAT
+    ShareRoleGrant / ShareSlide
+
+    +
+
+    WHEN
+    RoomStage
+
+    =
+
+    reusable interaction protocol
+
+This automation layer is deliberately not part of Session Flow v1.
+
+---
+
+# Built-In Template Configuration
+
+## Sales Call
+
+Roles:
+
+- Sales Rep — host
+- Sales Engineer
+- Client
+
+Existing presets:
+
+- All Roles
+- Rep + Engineer Only
+- Rep Only
+
+Session Flow does not need to be enabled by default.
+
+---
+
+## Mock Trial
+
+Roles:
+
+- Judge — host
+- Jury — multi-member
+- Defense
+- Prosecution
+
+Existing presets:
+
+- All Roles
+- Judge + Jury Only
+- Judge Only
+- Defense Only
+- Prosecution Only
+
+Mock Trial is a strong candidate for a Precued-provided default Session Flow.
+
+---
+
+## Lincoln-Douglas Debate
+
+Roles:
+
+- Judge — host
+- Affirmative
+- Negative
+- Audience — multi-member
+
+Existing presets:
+
+- All Roles
+- Judge Only
+- Affirmative Only
+- Negative Only
+
+LD Debate is also a natural candidate for a Precued-provided timed Session Flow.
+
+---
+
+# Presentation Feature Status
+
+Current repository status:
+
+- ✅ Share `kind` supports `SCREEN` and `PRESENTATION`
+- ✅ `Share.current_slide_index`
+- ✅ `ShareSlide`
+- ✅ slide-scoped `ShareRoleGrant`
+- ✅ PDF validation/rendering
+- ✅ slide image storage
+- ✅ presentation upload API
+- ✅ slide image retrieval
+- ✅ presenter navigation
+- ✅ per-slide role visibility controls
+- ✅ participant locked/unavailable state
+- ⬜ PPTX import/conversion
+- ⬜ native slide creation/editor
+
+The old “Chunk 1 only” description is no longer current.
+
+---
+
+# Current / Near-Future Implementation Notes
+
+## Custom Templates
+
+CURRENT:
+
+- custom Template creation;
+- user ownership/private visibility;
+- custom TemplateRole creation/removal.
+
+Still needed before custom Templates are fully equivalent to built-ins:
+
+- enforce custom Template ownership in Room creation;
+- allow custom Templates to launch Rooms through the frontend;
+- custom visibility/preset configuration;
+- optional Session Flow builder.
+
+---
+
+## Invites
+
+CURRENT:
+
+- schema/entity/repository.
+
+Still pending:
+
+- host invite creation UI/API flow;
+- token consumption;
+- usage-counter/status transitions;
+- expiration processing;
+- optional historical assignment → Invite traceability.
+
+---
+
+## Host Disconnect
+
+CURRENT:
+
+- Room policy fields.
+
+Still pending:
+
+- webhook/service enforcement of `END_CALL`;
+- grace-period behavior;
+- indefinite-persist behavior.
+
+---
+
+## Publisher Disconnect
+
+CURRENT:
+
+- explicit Share end path.
+
+Still pending:
+
+- automatic Share termination when its publisher leaves.
+
+---
+
+# Diagram Guidance
+
+## Diagram 1 — Config-Time Schema
+
+Update the existing diagram to show:
+
+### Template
+
+    id
+    name
+    created_by_user_id
+    created_at
+
+Do not describe Template IDs as only:
+
+`sales_call | mock_trial | ld_debate`
+
+because custom Templates now use generated UUID strings.
+
+### TemplateRole
+
+Add:
+
+`is_guest_role`
+
+### Footer
+
+Replace the old:
+
+> seeded once (3 templates), read-only at runtime
+
+with something closer to:
+
+> Config-time tables. Built-in templates are seeded/public/read-only; custom templates are private to their creator and editable. Runtime Rooms use snapshots rather than live template references.
+
+Do not add Session Flow tables directly to Diagram 1 if Diagram 4 is used.
+
+---
+
+## Diagram 2 — Runtime Schema
+
+Update:
+
+### User
+
+Add:
+
+`password_hash (string, nullable)`
+
+### RoomParticipant
+
+Add:
+
+`session_token (string, unique/nullable at DB level)`
+
+### Invite
+
+Add the current Invite entity connected:
+
+    RoomRole 1 → many Invite
+
+AuthSession and MagicLinkToken may be intentionally omitted from this diagram to keep it focused on live-call state, but note:
+
+> Account/magic-link auth support tables omitted for clarity.
+
+Do not add Session Flow directly here if Diagram 4 is used.
+
+---
+
+## Diagram 3 — Slide-Level Visibility Extension
+
+Keep the same overall structure.
+
+Update the Share box to show:
+
+    kind (enum: SCREEN | PRESENTATION)
+    current_slide_index (int, default 0)
+
+Remove the `NEW` labels if this is meant to represent current architecture rather than historical change.
+
+Update the caption to indicate slide-level presentation visibility is now implemented.
+
+---
+
+## Diagram 4 — Optional Session Flow Extension
+
+Add a fourth diagram containing:
+
+### Existing references
+
+- Template
+- TemplateRole
+- Room
+- RoomRole
+
+### Planned fields
+
+- `Template.session_flow_enabled`
+- `Room.session_flow_enabled`
+
+### New tables
+
+- TemplateStage
+- TemplateStageRole
+- RoomStage
+- RoomStageRole
+
+### Relationships
+
+    Template 1 → many TemplateStage
+    TemplateStage many ↔ many TemplateRole via TemplateStageRole
+
+    Room 1 → many RoomStage
+    RoomStage many ↔ many RoomRole via RoomStageRole
+
+and show:
+
+    TemplateStage --snapshot--> RoomStage
+    TemplateStageRole --snapshot--> RoomStageRole
+
+Include callouts:
+
+> Session Flow is optional.
+
+> duration_seconds = NULL means untimed.
+
+> At most one ACTIVE RoomStage per Room.
+
+> Timer expiration does not auto-advance in v1.
+
+> Runtime progression uses RoomStage/RoomStageRole only; Template references are traceability/configuration, not live dependencies.
+
+---
+
+# Planned Schema Count
+
+Current:
+
+    16 tables
+
+After Session Flow v1:
+
+    + template_stage
+    + template_stage_role
+    + room_stage
+    + room_stage_role
+
+Planned total:
+
+    20 tables
+
+No template-specific tables are required.
+
+Adding a new use case remains configuration rather than schema duplication.
