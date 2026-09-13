@@ -1,10 +1,13 @@
 import type {
   ActiveShare,
+  InviteMode,
+  InvitePreview,
   LiveKitTokenResponse,
   MagicLinkResponse,
   ParticipantRoleAssignment,
   PresentationUploadResponse,
   Room,
+  RoomInvite,
   RoomParticipant,
   RoomParticipantWithGrants,
   RoomRole,
@@ -33,14 +36,7 @@ type ProblemDetail = {
 type RequestAuthMode = "participant" | "none";
 
 async function request<T>(path: string, init?: RequestInit, authMode: RequestAuthMode = "participant"): Promise<T> {
-  // Most requests scoped to a Room or to acting as a participant need the
-  // RoomParticipant bearer token. Some public endpoints intentionally must
-  // NOT receive it, because /api/templates/** treats any supplied bearer as
-  // an Account/AuthSession token. Those callers opt out with authMode=none.
   const participant = authMode === "participant" ? getParticipant() : null;
-  // A FormData body (presentation upload) must let the browser set its own
-  // multipart/form-data boundary header — forcing application/json here
-  // would break the request.
   const isFormData = init?.body instanceof FormData;
   const response = await fetch(`${API_BASE}${path}`, {
     ...init,
@@ -52,19 +48,6 @@ async function request<T>(path: string, init?: RequestInit, authMode: RequestAut
   });
 
   if (response.status === 401) {
-    // A 401 here always means "not authenticated at all" (SecurityConfig's
-    // AuthenticationEntryPoint, AuthSessionInterceptor, or
-    // AuthenticationRequiredException on the backend — never a
-    // business-rule rejection, which is 403/404/400 instead). The stored
-    // token is worthless once this happens, whatever the reason (expired,
-    // revoked, or simply never valid) — clear it and force a fresh sign-in
-    // rather than leaving the app stuck retrying with the same bad token.
-    //
-    // Auth & Account Overhaul: "/" is a public landing page with no sign-in
-    // form on it, so an Account Holder's dead session has to land on
-    // /login specifically. Checked before clearing: an Account Holder
-    // session (precued.auth) means /login; a guest's room-scoped session
-    // alone means /, since a guest never had an account to log back into.
     const wasAccountHolder = Boolean(getAuthSession());
     clearSession();
     location.assign(wasAccountHolder ? "/login?sessionExpired=1" : "/?sessionExpired=1");
@@ -86,26 +69,10 @@ async function request<T>(path: string, init?: RequestInit, authMode: RequestAut
   return (await response.json()) as T;
 }
 
-/**
- * A plain <img src> can't send an Authorization header, and the proxy
- * endpoint requires one (ParticipantSessionInterceptor) — so slide images
- * are fetched here as an authenticated blob and turned into an object URL,
- * never loaded directly by src. 403 (not authorized for this slide right
- * now) is an expected, common outcome — not an exception — since a viewer
- * without a qualifying grant on the current slide hits it on every poll
- * tick; only unexpected failures are distinguished by status for the
- * caller to decide how to react.
- */
 export type SlideImageResult =
   | { ok: true; objectUrl: string }
   | { ok: false; status: number };
 
-/**
- * A distinct, honest message for a slide image that genuinely doesn't exist
- * in storage (404 — see SlideImageStorage's NoSuchKeyException handling on
- * the backend) versus every other failure, which stays a generic
- * status-carrying message since there's nothing more specific to say.
- */
 export function describeSlideImageError(status: number): string {
   if (status === 404) {
     return "This slide's image is missing. Ask the host to re-upload the presentation.";
@@ -113,12 +80,6 @@ export function describeSlideImageError(status: number): string {
   return `Unable to load slide (${status})`;
 }
 
-/**
- * AuthService.verifyMagicLink's own messages are already clear for an
- * expired or already-used link ("...has expired" / "...already been used");
- * only the unknown-token case ("No magic link token <token>") leaks a raw
- * token value that means nothing to the person reading it.
- */
 export function describeMagicLinkVerifyError(message: string): string {
   if (message.startsWith("No magic link token")) {
     return "This sign-in link is invalid.";
@@ -165,15 +126,6 @@ export const api = {
     });
   },
 
-  /**
-   * authSessionToken (from getAuthSession()) is the ONLY thing that
-   * determines who this room is created by — the backend derives
-   * createdByUserId from it (AuthSessionInterceptor), never from a body
-   * field, since a body field was the original vulnerability.
-   *
-   * templateId is a string because custom Templates use generated ids; the
-   * backend remains the authority for ownership/visibility.
-   */
   createRoom(templateId: string, authSessionToken: string) {
     return request<Room>("/api/rooms", {
       method: "POST",
@@ -211,19 +163,56 @@ export const api = {
     return request<RoomParticipantWithGrants[]>(`/api/rooms/${roomId}/room-participants`);
   },
 
-  /**
-   * authSessionToken is required whenever userId is non-null — the backend
-   * rejects a userId claim with no matching AuthSession behind it. A guest
-   * join (userId null) omits it.
-   */
-  joinRoom(roomId: string, displayName: string, userId: string | null, authSessionToken?: string) {
-    return request<RoomParticipant>("/api/room-participants", {
+  listRoomInvites(roomId: string) {
+    return request<RoomInvite[]>(`/api/rooms/${roomId}/invites`);
+  },
+
+  createRoomInvite(
+    roomId: string,
+    input: {
+      roomRoleId: string;
+      mode: InviteMode;
+      inviteeEmail?: string | null;
+      maxUses?: number | null;
+      expiresAt?: string | null;
+    },
+  ) {
+    return request<RoomInvite>(`/api/rooms/${roomId}/invites`, {
       method: "POST",
-      headers: authSessionToken ? { Authorization: `Bearer ${authSessionToken}` } : undefined,
-      body: JSON.stringify({ roomId, userId, displayName }),
+      body: JSON.stringify(input),
     });
   },
 
+  expireRoomInvite(roomId: string, inviteId: string) {
+    return request<RoomInvite>(`/api/rooms/${roomId}/invites/${inviteId}/expire`, {
+      method: "POST",
+    });
+  },
+
+  getInvitePreview(inviteToken: string) {
+    return request<InvitePreview>(`/api/invites/${encodeURIComponent(inviteToken)}`, undefined, "none");
+  },
+
+  /**
+   * Account Holder joins use userId + AuthSession. Guest joins have userId
+   * null and must supply a real Invite token; the backend atomically creates
+   * the role assignment while consuming that invite.
+   */
+  joinRoom(
+    roomId: string,
+    displayName: string,
+    userId: string | null,
+    authSessionToken?: string,
+    inviteToken?: string,
+  ) {
+    return request<RoomParticipant>("/api/room-participants", {
+      method: "POST",
+      headers: authSessionToken ? { Authorization: `Bearer ${authSessionToken}` } : undefined,
+      body: JSON.stringify({ roomId, userId, displayName, inviteToken }),
+    });
+  },
+
+  /** Host bootstrap only after PR 9; guest roles are assigned by invite consumption. */
   assignRole(roomParticipantId: string, roomRoleId: string) {
     return request<ParticipantRoleAssignment>("/api/participant-role-assignments", {
       method: "POST",
@@ -236,19 +225,9 @@ export const api = {
   },
 
   getPresets(templateId: string) {
-    // Preset reads are public. Do not attach the RoomParticipant token:
-    // AuthSessionInterceptor owns /api/templates/** and interprets any bearer
-    // there as an Account/AuthSession token, which caused Start Call to 401.
-    // Custom templates currently return an empty list until custom visibility
-    // configuration is introduced.
     return request<TemplatePreset[]>(`/api/templates/${templateId}/presets`, undefined, "none");
   },
 
-  /**
-   * M-Templates custom role builder. authSessionToken (from getAuthSession())
-   * is required here the same way it is for createRoom — TemplateService
-   * derives ownership from it, never from a body field.
-   */
   createTemplate(name: string, authSessionToken: string) {
     return request<TemplateSummary>("/api/templates", {
       method: "POST",
@@ -328,7 +307,6 @@ export const api = {
     return request<Share>(`/api/shares/${shareId}/end`, { method: "POST" });
   },
 
-  /** shareSlideId omitted/null creates a whole-share grant — unchanged prior behavior. */
   createGrant(shareId: string, roomRoleId: string, shareSlideId?: string | null) {
     return request<ShareRoleGrant>("/api/share-role-grants", {
       method: "POST",

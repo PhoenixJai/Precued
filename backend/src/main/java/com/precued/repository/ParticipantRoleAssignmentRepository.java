@@ -13,4 +13,6 @@ public interface ParticipantRoleAssignmentRepository
     Optional<ParticipantRoleAssignment> findByRoomParticipantIdAndRevokedAtIsNull(UUID participantId);
 
     List<ParticipantRoleAssignment> findByRoomParticipantIdOrderByAssignedAtDesc(UUID participantId);
+
+    long countByRoomRoleIdAndRevokedAtIsNull(UUID roomRoleId);
 }

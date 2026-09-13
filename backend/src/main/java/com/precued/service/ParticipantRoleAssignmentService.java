@@ -9,17 +9,17 @@ import com.precued.repository.RoomParticipantRepository;
 import com.precued.repository.RoomRoleRepository;
 import com.precued.security.CurrentParticipantContext;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
 import java.util.UUID;
 
 /**
- * Minimal write + VisibilityEngine trigger wiring for the
- * ParticipantRoleAssignment row of the trigger table. Does not enforce
- * the "at most one active assignment" MVP rule beyond the DB's partial
- * unique index — full role-assignment validation (e.g. checking the new
- * role belongs to the same room) belongs to a future assignment feature,
- * not this trigger-wiring pass.
+ * Runtime assignment mutation. PR 9 moves initial guest-role assignment into
+ * InviteJoinService so invite consumption and maxMembers enforcement are
+ * atomic. This legacy assign endpoint remains for the Account Holder host
+ * bootstrap only; guests cannot use it to select/bypass an Invite-protected
+ * role after obtaining a participant session.
  */
 @Service
 public class ParticipantRoleAssignmentService {
@@ -40,13 +40,6 @@ public class ParticipantRoleAssignmentService {
         this.engine = engine;
     }
 
-    /**
-     * Revokes an active assignment, then recomputes every active Share in
-     * the participant's room. Callers doing a reassignment must call this
-     * BEFORE {@link #assign}, as two separate writes — never combine them
-     * into one atomic swap, or the fail-closed gap the spec relies on
-     * (Precued_DataModel.md § "Failure / race handling") never happens.
-     */
     public ParticipantRoleAssignment revoke(UUID assignmentId) {
         ParticipantRoleAssignment assignment = assignmentRepository.findById(assignmentId)
                 .orElseThrow(() -> new IllegalArgumentException(
@@ -64,29 +57,36 @@ public class ParticipantRoleAssignmentService {
         return saved;
     }
 
-    /**
-     * Creates a new active assignment, then recomputes every active Share in
-     * the room. Rejects assigning a host role to a participant with no
-     * linked User — magic-link auth is required for host-role participants
-     * (Issue #1, resolved), so RoomParticipant.user_id must already be
-     * populated by the time this is called; this never creates a User
-     * itself.
-     */
+    /** Account Holder host bootstrap only. Guest roles are assigned by InviteJoinService. */
+    @Transactional
     public ParticipantRoleAssignment assign(UUID roomParticipantId, UUID roomRoleId) {
         RoomParticipant participant = roomParticipantRepository.findById(roomParticipantId)
                 .orElseThrow(() -> new IllegalArgumentException(
                         "No RoomParticipant with id " + roomParticipantId));
-        RoomRole role = roomRoleRepository.findById(roomRoleId)
+        // The same RoomRole lock used by InviteService/InviteJoinService makes
+        // maxMembers a real concurrent invariant rather than a best-effort
+        // pre-check.
+        RoomRole role = roomRoleRepository.findByIdForUpdate(roomRoleId)
                 .orElseThrow(() -> new IllegalArgumentException("No RoomRole with id " + roomRoleId));
 
         if (!CurrentParticipantContext.get().getId().equals(roomParticipantId)) {
             throw new IllegalStateException("Cannot assign a role to another participant");
         }
-
-        if (role.isHostRole() && participant.getUser() == null) {
+        if (participant.getRoom() == null || role.getRoom() == null
+                || !participant.getRoom().getId().equals(role.getRoom().getId())) {
+            throw new IllegalStateException("Participant and role must belong to the same room");
+        }
+        if (!role.isHostRole()) {
+            throw new IllegalStateException("Guest roles must be assigned by consuming a valid invite token");
+        }
+        if (participant.getUser() == null) {
             throw new IllegalStateException(
                     "RoomParticipant " + roomParticipantId
                             + " has no linked User and cannot be assigned a host role");
+        }
+        if (role.getMaxMembers() != null
+                && assignmentRepository.countByRoomRoleIdAndRevokedAtIsNull(roomRoleId) >= role.getMaxMembers()) {
+            throw new IllegalStateException("Role is already at capacity");
         }
 
         ParticipantRoleAssignment assignment = new ParticipantRoleAssignment();

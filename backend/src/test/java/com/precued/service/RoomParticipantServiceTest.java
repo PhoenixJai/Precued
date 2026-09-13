@@ -32,13 +32,6 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-/**
- * Covers RoomParticipantService#listWithGrants: every RoomParticipant in a
- * room, resolved with their currently active RoomRole and the
- * ShareRoleGrants currently applicable to it (active grant, on a
- * still-active Share) — the "GET RoomParticipants with current role + active
- * grants" endpoint the frontend needs.
- */
 @ExtendWith(MockitoExtension.class)
 class RoomParticipantServiceTest {
 
@@ -87,7 +80,7 @@ class RoomParticipantServiceTest {
         when(roomRepository.findById(roomId)).thenReturn(Optional.of(room));
 
         User authenticated = new User();
-        authenticated.setId(UUID.randomUUID()); // different from claimedUserId
+        authenticated.setId(UUID.randomUUID());
         CurrentUserContext.set(authenticated);
 
         assertThatThrownBy(() -> service.join(roomId, claimedUserId, "Host"))
@@ -97,15 +90,38 @@ class RoomParticipantServiceTest {
     }
 
     @Test
-    void join_userIdMatchesAuthenticatedSession_linksUser() {
+    void join_authenticatedUserDidNotCreateRoom_isRejected() {
         UUID roomId = UUID.randomUUID();
-        UUID userId = UUID.randomUUID();
+        User creator = new User();
+        creator.setId(UUID.randomUUID());
+        User authenticated = new User();
+        authenticated.setId(UUID.randomUUID());
+
         Room room = new Room();
         room.setId(roomId);
+        room.setCreatedBy(creator);
         when(roomRepository.findById(roomId)).thenReturn(Optional.of(room));
+        CurrentUserContext.set(authenticated);
 
+        assertThatThrownBy(() -> service.join(roomId, authenticated.getId(), "Not the host"))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("created this room");
+
+        verify(userRepository, never()).findById(org.mockito.ArgumentMatchers.any());
+        verify(roomParticipantRepository, never()).save(org.mockito.ArgumentMatchers.any());
+    }
+
+    @Test
+    void join_userIdMatchesAuthenticatedSessionAndRoomCreator_linksUser() {
+        UUID roomId = UUID.randomUUID();
+        UUID userId = UUID.randomUUID();
         User user = new User();
         user.setId(userId);
+
+        Room room = new Room();
+        room.setId(roomId);
+        room.setCreatedBy(user);
+        when(roomRepository.findById(roomId)).thenReturn(Optional.of(room));
         when(userRepository.findById(userId)).thenReturn(Optional.of(user));
         CurrentUserContext.set(user);
         when(roomParticipantRepository.save(org.mockito.ArgumentMatchers.any(RoomParticipant.class)))

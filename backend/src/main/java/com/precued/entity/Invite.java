@@ -8,11 +8,11 @@ import java.time.Instant;
 import java.util.UUID;
 
 /**
- * Sits in front of ParticipantRoleAssignment as a pre-assignment layer.
- * One-time-use join artifact: once consumed it has no ongoing authority
- * over the participant's role history. Reassigning a participant's role
- * mid-call via ParticipantRoleAssignment does NOT touch the originating
- * Invite row.
+ * Pre-assignment bearer artifact that resolves to exactly one RoomRole.
+ * NAMED invites are single-use; POOL invites may be consumed up to maxUses.
+ * A successful consumption is recorded on ParticipantRoleAssignment for
+ * history, but later role reassignment does not mutate or regain authority
+ * from the originating Invite.
  */
 @Entity
 @Table(name = "invite")
@@ -28,14 +28,14 @@ public class Invite {
     @JoinColumn(name = "room_role_id", nullable = false)
     private RoomRole roomRole;
 
-    /** null = pool link (unnamed), set = named invite */
+    /** null = pool link (unnamed), set = named invite tracking label */
     @Column(name = "invitee_email")
     private String inviteeEmail;
 
     @Column(nullable = false, unique = true)
     private String token;
 
-    /** Named invite = 1. Pool link = RoomRole.maxMembers (or host-set cap if null). */
+    /** Named invite = 1. Pool link = bounded host-selected/default capacity. */
     @Column(name = "max_uses", nullable = false)
     private int maxUses;
 
@@ -46,7 +46,6 @@ public class Invite {
     @Column(nullable = false, length = 16)
     private Status status = Status.PENDING;
 
-    /** Host-set per RoomRole at room creation; defaults from RoomRole.maxMembers. */
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 16)
     private Mode mode;
@@ -54,7 +53,7 @@ public class Invite {
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
 
-    /** null = expires at Room.endedAt */
+    /** null = valid until the Room ends; service-created invites currently receive a default TTL. */
     @Column(name = "expires_at")
     private Instant expiresAt;
 

@@ -31,39 +31,28 @@ public class WebMvcConfig implements WebMvcConfigurer {
                 .excludePathPatterns(
                         "/api/auth/**",
                         "/api/templates/**",
-                        // Room creation and joining are how a session begins —
-                        // neither can require a RoomParticipant session yet.
-                        // Exact paths only, so sub-resources under them (e.g.
-                        // /api/rooms/{roomId}/..., /api/room-participants/{id}/livekit-token)
-                        // stay covered. AuthSessionInterceptor (below) covers
-                        // these two instead, with User-identity semantics.
+                        // Room creation and participant creation are how a
+                        // session begins; a RoomParticipant token cannot exist
+                        // before these requests complete.
                         "/api/rooms",
                         "/api/room-participants",
-                        // Called before the host/guest has joined (to resolve
-                        // which RoomRole to self-assign) — not sensitive enough
-                        // to justify breaking that ordering.
+                        // A guest must resolve their opaque Invite before a
+                        // RoomParticipant/session token exists.
+                        "/api/invites/*",
+                        // Host bootstrap resolves the snapshotted host role
+                        // before that host has a RoomParticipant session.
                         "/api/rooms/*/room-roles");
 
-        // /api/rooms, /api/room-participants: createdByUserId/userId in
-        // their request bodies must come from a verified AuthSession, never
-        // an unverified body claim — see AuthSessionInterceptor's own
-        // Javadoc for how the two paths differ (required vs. optional).
-        // /api/templates/**: M-Templates' custom template ownership — a
-        // *different* kind of optional-unless-the-service-needs-it path,
-        // same reasoning as room-participants: GET .../presets and reading
-        // a built-in template need no token at all, so this only resolves
-        // one *if* present; TemplateService is what actually requires one
-        // for create/add-role/list-mine, exactly like RoomParticipantService
-        // does for a non-guest join.
+        // Account Holder identity is resolved independently from the
+        // RoomParticipant token space. Room creation requires it; participant
+        // creation uses it when a userId is claimed; custom Template ownership
+        // uses it when the service requires an Account Holder.
         registry.addInterceptor(authSessionInterceptor)
                 .addPathPatterns("/api/rooms", "/api/room-participants", "/api/templates/**");
     }
 
     // Bearer tokens are sent in an Authorization header, never a cookie, so
     // this deliberately doesn't allowCredentials — nothing here needs it.
-    // Keep this list aligned with the HTTP methods actually exposed by the
-    // controllers: browser preflight blocks a cross-origin write before the
-    // controller is reached when its method is missing here.
     @Override
     public void addCorsMappings(CorsRegistry registry) {
         if (allowedOrigin.isBlank()) return;

@@ -27,11 +27,10 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 /**
- * Covers the host-role-requires-User enforcement added for hybrid auth
- * (Issue #1, resolved): magic-link auth is required for host-role
- * participants, so a host-role assignment must never succeed for a
- * RoomParticipant with no linked User (a guest). Non-host roles are
- * untouched by this check — guest join stays exactly as it was.
+ * PR 9 makes InviteJoinService the only initial assignment path for guest
+ * roles. The legacy self-assign endpoint remains only for Account Holder host
+ * bootstrap, so possessing a participant token cannot bypass invite/capacity
+ * enforcement by choosing an arbitrary non-host RoomRole afterward.
  */
 @ExtendWith(MockitoExtension.class)
 class ParticipantRoleAssignmentServiceTest {
@@ -49,8 +48,6 @@ class ParticipantRoleAssignmentServiceTest {
 
     @BeforeEach
     void authenticateAsSelf() {
-        // All three tests below have participantId assign their own role —
-        // matches every real caller (self-assign only, enforced in the service).
         RoomParticipant self = new RoomParticipant();
         self.setId(participantId);
         CurrentParticipantContext.set(self);
@@ -71,6 +68,16 @@ class ParticipantRoleAssignmentServiceTest {
         return participant;
     }
 
+    private RoomRole roleInRoom(boolean hostRole) {
+        Room room = new Room();
+        room.setId(roomId);
+        RoomRole role = new RoomRole();
+        role.setId(roleId);
+        role.setRoom(room);
+        role.setHostRole(hostRole);
+        return role;
+    }
+
     @Test
     void assign_hostRoleWithoutLinkedUser_rejectsAndDoesNotCreateAssignment() {
         service = new ParticipantRoleAssignmentService(
@@ -78,10 +85,8 @@ class ParticipantRoleAssignmentServiceTest {
 
         RoomParticipant guest = participantWithUser(null);
         when(roomParticipantRepository.findById(participantId)).thenReturn(Optional.of(guest));
-        RoomRole hostRole = new RoomRole();
-        hostRole.setId(roleId);
-        hostRole.setHostRole(true);
-        when(roomRoleRepository.findById(roleId)).thenReturn(Optional.of(hostRole));
+        RoomRole hostRole = roleInRoom(true);
+        when(roomRoleRepository.findByIdForUpdate(roleId)).thenReturn(Optional.of(hostRole));
 
         assertThatThrownBy(() -> service.assign(participantId, roleId))
                 .isInstanceOf(IllegalStateException.class)
@@ -101,10 +106,8 @@ class ParticipantRoleAssignmentServiceTest {
         user.setId(UUID.randomUUID());
         RoomParticipant host = participantWithUser(user);
         when(roomParticipantRepository.findById(participantId)).thenReturn(Optional.of(host));
-        RoomRole hostRole = new RoomRole();
-        hostRole.setId(roleId);
-        hostRole.setHostRole(true);
-        when(roomRoleRepository.findById(roleId)).thenReturn(Optional.of(hostRole));
+        RoomRole hostRole = roleInRoom(true);
+        when(roomRoleRepository.findByIdForUpdate(roleId)).thenReturn(Optional.of(hostRole));
         when(assignmentRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
 
         assertThat(service.assign(participantId, roleId)).isNotNull();
@@ -113,21 +116,68 @@ class ParticipantRoleAssignmentServiceTest {
     }
 
     @Test
-    void assign_nonHostRoleWithoutLinkedUser_stillSucceeds_guestJoinUnaffected() {
+    void assign_hostRoleAtCapacity_isRejected() {
+        service = new ParticipantRoleAssignmentService(
+                assignmentRepository, roomParticipantRepository, roomRoleRepository, engine);
+
+        User user = new User();
+        user.setId(UUID.randomUUID());
+        RoomParticipant host = participantWithUser(user);
+        when(roomParticipantRepository.findById(participantId)).thenReturn(Optional.of(host));
+        RoomRole hostRole = roleInRoom(true);
+        hostRole.setMaxMembers(1);
+        when(roomRoleRepository.findByIdForUpdate(roleId)).thenReturn(Optional.of(hostRole));
+        when(assignmentRepository.countByRoomRoleIdAndRevokedAtIsNull(roleId)).thenReturn(1L);
+
+        assertThatThrownBy(() -> service.assign(participantId, roleId))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("capacity");
+
+        verify(assignmentRepository, never()).save(any());
+        verify(engine, never()).recomputeAndPushForRoom(any());
+    }
+
+    @Test
+    void assign_nonHostRoleDirectly_isRejected_guestMustUseInviteJoin() {
         service = new ParticipantRoleAssignmentService(
                 assignmentRepository, roomParticipantRepository, roomRoleRepository, engine);
 
         RoomParticipant guest = participantWithUser(null);
         when(roomParticipantRepository.findById(participantId)).thenReturn(Optional.of(guest));
-        RoomRole memberRole = new RoomRole();
-        memberRole.setId(roleId);
-        memberRole.setHostRole(false);
-        when(roomRoleRepository.findById(roleId)).thenReturn(Optional.of(memberRole));
-        when(assignmentRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        RoomRole memberRole = roleInRoom(false);
+        when(roomRoleRepository.findByIdForUpdate(roleId)).thenReturn(Optional.of(memberRole));
 
-        assertThat(service.assign(participantId, roleId)).isNotNull();
+        assertThatThrownBy(() -> service.assign(participantId, roleId))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("invite");
 
-        verify(engine).recomputeAndPushForRoom(roomId);
+        verify(assignmentRepository, never()).save(any());
+        verify(engine, never()).recomputeAndPushForRoom(any());
+    }
+
+    @Test
+    void assign_roleFromAnotherRoom_isRejected() {
+        service = new ParticipantRoleAssignmentService(
+                assignmentRepository, roomParticipantRepository, roomRoleRepository, engine);
+
+        User user = new User();
+        user.setId(UUID.randomUUID());
+        RoomParticipant host = participantWithUser(user);
+        when(roomParticipantRepository.findById(participantId)).thenReturn(Optional.of(host));
+
+        Room otherRoom = new Room();
+        otherRoom.setId(UUID.randomUUID());
+        RoomRole hostRole = new RoomRole();
+        hostRole.setId(roleId);
+        hostRole.setRoom(otherRoom);
+        hostRole.setHostRole(true);
+        when(roomRoleRepository.findByIdForUpdate(roleId)).thenReturn(Optional.of(hostRole));
+
+        assertThatThrownBy(() -> service.assign(participantId, roleId))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("same room");
+
+        verify(assignmentRepository, never()).save(any());
     }
 
     @Test
@@ -137,11 +187,9 @@ class ParticipantRoleAssignmentServiceTest {
 
         RoomParticipant target = participantWithUser(null);
         when(roomParticipantRepository.findById(participantId)).thenReturn(Optional.of(target));
-        RoomRole role = new RoomRole();
-        role.setId(roleId);
-        when(roomRoleRepository.findById(roleId)).thenReturn(Optional.of(role));
+        RoomRole role = roleInRoom(true);
+        when(roomRoleRepository.findByIdForUpdate(roleId)).thenReturn(Optional.of(role));
 
-        // Authenticated as someone other than the target participantId.
         RoomParticipant someoneElse = new RoomParticipant();
         someoneElse.setId(UUID.randomUUID());
         CurrentParticipantContext.set(someoneElse);
