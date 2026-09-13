@@ -1,0 +1,174 @@
+.invite-tracker-card {
+  align-self: start;
+}
+
+.invite-role-list {
+  display: grid;
+  gap: 14px;
+}
+
+.invite-role-panel {
+  border: 1px solid #e2e7f0;
+  border-radius: 14px;
+  padding: 18px;
+  background: #fff;
+}
+
+.invite-role-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.invite-role-heading .role-summary {
+  min-width: 0;
+}
+
+.invite-role-heading .role-summary small {
+  display: block;
+  margin-top: 3px;
+  color: #7d8799;
+  font-size: 12px;
+}
+
+.invite-host-person {
+  margin-top: 14px;
+}
+
+.invite-joined-summary {
+  display: flex;
+  align-items: baseline;
+  gap: 9px;
+  margin-top: 14px;
+  padding: 10px 12px;
+  border-radius: 9px;
+  background: #f6f9ff;
+  color: #48566f;
+  font-size: 12px;
+}
+
+.invite-record-list {
+  display: grid;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.invite-record {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 11px 12px;
+  border: 1px solid #e5e9f1;
+  border-radius: 10px;
+  background: #fbfcff;
+}
+
+.invite-record-main {
+  min-width: 0;
+}
+
+.invite-record-main strong,
+.invite-record-main small {
+  display: block;
+}
+
+.invite-record-main strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: #24314b;
+  font-size: 13px;
+}
+
+.invite-record-main small {
+  margin-top: 3px;
+  color: #7b8699;
+  font-size: 11px;
+}
+
+.invite-create-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 12px;
+  margin-top: 16px;
+  padding-top: 15px;
+  border-top: 1px solid #edf0f5;
+}
+
+.invite-create-block {
+  display: grid;
+  gap: 7px;
+  min-width: 0;
+}
+
+.invite-create-block > strong {
+  color: #34415c;
+  font-size: 12px;
+}
+
+.invite-create-block > small {
+  min-height: 32px;
+  color: #8a93a5;
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.invite-create-row {
+  display: flex;
+  gap: 8px;
+  align-items: stretch;
+}
+
+.invite-create-row input {
+  min-width: 0;
+  flex: 1;
+  min-height: 38px;
+  border: 1px solid #d8dfeb;
+  border-radius: 8px;
+  padding: 0 10px;
+  color: #24314b;
+  background: #fff;
+  outline: none;
+}
+
+.invite-create-row input:focus {
+  border-color: #6686ed;
+  box-shadow: 0 0 0 3px rgba(102, 134, 237, .12);
+}
+
+.invite-create-row input:disabled {
+  background: #f5f7fa;
+  color: #98a0af;
+}
+
+.invite-uses-input {
+  max-width: 90px;
+}
+
+.readiness-item small + small {
+  margin-top: 2px;
+}
+
+@media (max-width: 880px) {
+  .invite-create-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 620px) {
+  .invite-role-heading,
+  .invite-record,
+  .invite-create-row {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .invite-role-heading .status-pill {
+    align-self: flex-start;
+  }
+
+  .invite-uses-input {
+    max-width: none;
+  }
+}
