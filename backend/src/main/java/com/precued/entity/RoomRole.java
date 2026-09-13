@@ -37,6 +37,13 @@ public class RoomRole {
     @Column(name = "is_host_role", nullable = false)
     private boolean isHostRole;
 
+    /**
+     * Snapshotted from TemplateRole so runtime role-assignment UI can preserve
+     * the template's guest-role hint without reading mutable config-time rows.
+     */
+    @Column(name = "is_guest_role", nullable = false)
+    private boolean isGuestRole;
+
     @Column(name = "max_members")
     private Integer maxMembers;
 }
