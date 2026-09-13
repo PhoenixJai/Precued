@@ -1,5 +1,6 @@
 package com.precued.controller;
 
+import com.precued.config.SecurityConfig;
 import com.precued.entity.AuthSession;
 import com.precued.entity.MagicLinkToken;
 import com.precued.entity.User;
@@ -7,14 +8,14 @@ import com.precued.repository.AuthSessionRepository;
 import com.precued.repository.RoomParticipantRepository;
 import com.precued.security.EmailAlreadyRegisteredException;
 import com.precued.security.InvalidCredentialsException;
+import com.precued.security.PublicEndpointRateLimiter;
 import com.precued.service.AccountService;
 import com.precued.service.AuthService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import com.precued.config.SecurityConfig;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
-import org.springframework.context.annotation.Import;
 import org.springframework.boot.test.mock.mockito.MockBean;
+import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 
@@ -36,6 +37,7 @@ class AuthControllerTest {
     @Autowired private MockMvc mockMvc;
     @MockBean private AuthService authService;
     @MockBean private AccountService accountService;
+    @MockBean private PublicEndpointRateLimiter rateLimiter;
     // /api/auth/** is excluded from ParticipantSessionInterceptor and never
     // reaches AuthSessionInterceptor either, but WebMvcConfig (which
     // @WebMvcTest picks up) wires both interceptor beans regardless, so

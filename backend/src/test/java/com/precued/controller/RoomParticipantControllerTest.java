@@ -1,18 +1,19 @@
 package com.precued.controller;
 
+import com.precued.config.SecurityConfig;
 import com.precued.controller.dto.LiveKitTokenResponse;
 import com.precued.entity.Room;
 import com.precued.entity.RoomParticipant;
 import com.precued.repository.AuthSessionRepository;
 import com.precued.repository.RoomParticipantRepository;
+import com.precued.security.PublicEndpointRateLimiter;
 import com.precued.service.LiveKitTokenService;
 import com.precued.service.RoomParticipantService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import com.precued.config.SecurityConfig;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
-import org.springframework.context.annotation.Import;
 import org.springframework.boot.test.mock.mockito.MockBean;
+import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 
@@ -39,6 +40,7 @@ class RoomParticipantControllerTest {
     @Autowired private MockMvc mockMvc;
     @MockBean private RoomParticipantService roomParticipantService;
     @MockBean private LiveKitTokenService liveKitTokenService;
+    @MockBean private PublicEndpointRateLimiter rateLimiter;
     @MockBean private RoomParticipantRepository roomParticipantRepository;
     @MockBean private AuthSessionRepository authSessionRepository;
 
