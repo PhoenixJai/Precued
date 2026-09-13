@@ -15,7 +15,7 @@ import type {
   TemplateId,
   TemplatePreset,
 } from "../types/precued";
-import { getParticipant } from "./session";
+import { clearSession, getParticipant } from "./session";
 
 const API_BASE = import.meta.env.VITE_API_BASE ?? "";
 
@@ -43,6 +43,19 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
       ...(init?.headers ?? {}),
     },
   });
+
+  if (response.status === 401) {
+    // A 401 here always means "not authenticated at all" (SecurityConfig's
+    // AuthenticationEntryPoint, AuthSessionInterceptor, or
+    // AuthenticationRequiredException on the backend — never a
+    // business-rule rejection, which is 403/404/400 instead). The stored
+    // token is worthless once this happens, whatever the reason (expired,
+    // revoked, or simply never valid) — clear it and force a fresh sign-in
+    // rather than leaving the app stuck retrying with the same bad token.
+    clearSession();
+    location.assign("/?sessionExpired=1");
+    throw new Error("Your session has expired. Please sign in again.");
+  }
 
   if (!response.ok) {
     let message = `Request failed (${response.status})`;
