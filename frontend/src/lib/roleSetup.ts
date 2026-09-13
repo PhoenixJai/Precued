@@ -7,8 +7,6 @@ export function findHostRole(roles: RoomRole[]): RoomRole | undefined {
 
 export interface RoleSetupRow {
   role: RoomRole;
-  /** null for the host role — they're already in the room, no invite needed. */
-  inviteUrl: string | null;
   /**
    * Every currently-present participant holding this role, not just one —
    * a role with maxMembers === null (e.g. Jury, Audience) can legitimately
@@ -21,12 +19,9 @@ export interface RoleSetupRow {
 export function buildRoleSetupRows(
   roles: RoomRole[],
   participants: RoomParticipantWithGrants[],
-  roomId: string,
-  origin: string,
 ): RoleSetupRow[] {
   return roles.map((role) => ({
     role,
-    inviteUrl: role.isHostRole ? null : `${origin}/join/${roomId}/${role.id}`,
     joinedParticipants: participants.filter(
       (participant) => participant.activeRoomRoleId === role.id && !participant.leftAt,
     ),
