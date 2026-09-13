@@ -43,7 +43,7 @@ public class InviteJoinService {
         this.visibilityEngine = visibilityEngine;
     }
 
-    @Transactional
+    @Transactional(noRollbackFor = InviteUnavailableException.class)
     public RoomParticipant join(UUID requestedRoomId, String inviteToken, String displayName) {
         if (inviteToken == null || inviteToken.isBlank()) {
             throw new IllegalStateException("A valid invite token is required for guest joins");
@@ -63,12 +63,12 @@ public class InviteJoinService {
                 || (invite.getExpiresAt() != null && !invite.getExpiresAt().isAfter(now))) {
             invite.setStatus(Invite.Status.EXPIRED);
             inviteRepository.save(invite);
-            throw new IllegalStateException("This invite has expired");
+            throw new InviteUnavailableException("This invite has expired");
         }
         if (invite.getStatus() == Invite.Status.USED || invite.getUsesCount() >= invite.getMaxUses()) {
             invite.setStatus(Invite.Status.USED);
             inviteRepository.save(invite);
-            throw new IllegalStateException("This invite has already been fully used");
+            throw new InviteUnavailableException("This invite has already been fully used");
         }
 
         // Serialize every join for this role, even when two different Invite
