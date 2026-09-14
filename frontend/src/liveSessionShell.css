@@ -3,9 +3,18 @@
   background: var(--precued-canvas);
 }
 
+.live-session-route .app-shell-bare,
+.live-session-route .app-shell-bare .page-background {
+  min-height: 0;
+  background: transparent;
+}
+.live-session-route .app-shell-bare .page-background {
+  overflow: visible;
+}
+
 .live-session-rail {
   position: fixed;
-  top: 62px;
+  top: 0;
   bottom: 0;
   left: 0;
   z-index: 7;
@@ -84,33 +93,32 @@
   box-shadow: 0 0 0 4px rgba(54,199,108,.12);
 }
 
+/* Session Flow is part of normal document flow. It should never float over
+   shared content or duplicate the call shell's content. */
 .live-session-flow-layer {
-  position: fixed;
-  top: 74px;
-  left: 96px;
-  right: 28px;
-  z-index: 6;
-  pointer-events: none;
+  position: relative;
+  z-index: 2;
+  margin-left: 76px;
+  padding: 18px 28px 0;
 }
 .live-session-flow-layer .session-flow-dock {
   width: min(1420px, 100%);
   margin: 0 auto;
-  pointer-events: auto;
 }
 .live-session-flow-layer .session-flow-panel {
   min-height: 88px;
   border-radius: 16px;
   border: 1px solid #dce4f0;
-  background: rgba(255,255,255,.97);
+  background: #fff;
   box-shadow: 0 14px 34px rgba(24,56,111,.08);
 }
 .live-session-flow-layer .session-flow-eyebrow { color: var(--precued-blue-600); }
 .live-session-flow-layer .session-flow-control { background: var(--precued-navy-900); }
 
 .live-session-route .call-page {
-  min-height: calc(100vh - 62px);
+  min-height: auto;
   margin-left: 76px;
-  padding: 126px 28px 30px;
+  padding: 18px 28px 30px;
   background: linear-gradient(180deg, #f7f9fc 0%, #f3f6fb 100%);
 }
 .live-session-route .call-header-row,
@@ -235,7 +243,7 @@
 .live-session-route .participants-sidebar {
   grid-area: participants;
   position: sticky;
-  top: 126px;
+  top: 18px;
   width: 100%;
   min-width: 0;
   min-height: 0;
@@ -285,13 +293,11 @@
 
 @media (max-width: 900px) {
   .live-session-rail { display: none; }
-  .live-session-flow-layer { left: 18px; right: 18px; }
-  .live-session-route .call-page { margin-left: 0; padding: 128px 18px 24px; }
+  .live-session-flow-layer { margin-left: 0; padding: 14px 18px 0; }
+  .live-session-route .call-page { margin-left: 0; padding: 14px 18px 24px; }
 }
 
 @media (max-width: 700px) {
-  .live-session-flow-layer { position: absolute; top: 72px; }
-  .live-session-route .call-page { padding-top: 154px; }
   .live-session-route .call-header-row { align-items: flex-start; gap: 12px; }
   .live-session-route .call-header-row h1 { font-size: 24px; }
   .live-session-route .share-stage,
