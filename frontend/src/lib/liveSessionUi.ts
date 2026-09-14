@@ -5,12 +5,14 @@ export interface LiveSessionRailItem {
 
 export type LiveSessionMode = "grid" | "share";
 export type ParticipantGridLayout = "single" | "two-up" | "three-up" | "quad" | "gallery";
+export type SharingSidebarSection = "share-visibility" | "share-actions" | "session-flow";
+export type SessionFlowSurface = "topbar" | "sidebar";
 
 export interface LiveSessionShellPolicy {
   showGlobalNavigation: boolean;
   showAppRail: boolean;
   workspaceMode: "full-viewport";
-  sessionFlowPlacement: "compact-topbar";
+  sessionFlowPlacement: "contextual";
   sessionFlowOwner: "live-session-route";
   utilityPanel: "share-only-collapsible-sidebar";
   utilityDefault: "collapsed";
@@ -48,6 +50,27 @@ export function participantGridLayout(participantCount: number): ParticipantGrid
 }
 
 /**
+ * Host/sharer controls are contextual. Grid mode stays participant-first and
+ * guests never receive a host control drawer.
+ */
+export function shouldShowSharingSidebar(mode: LiveSessionMode, canManageShare: boolean): boolean {
+  return mode === "share" && canManageShare;
+}
+
+/**
+ * Hosts/sharers move Session Flow into their contextual drawer while sharing.
+ * Guests keep the compact topbar so session structure remains visible without
+ * exposing host controls.
+ */
+export function sessionFlowSurface(mode: LiveSessionMode, canManageShare: boolean): SessionFlowSurface {
+  return mode === "share" && canManageShare ? "sidebar" : "topbar";
+}
+
+export function sharingSidebarSections(): SharingSidebarSection[] {
+  return ["share-visibility", "share-actions", "session-flow"];
+}
+
+/**
  * Desktop share-mode layout: shared content owns the flexible canvas and a
  * dedicated utility sidebar occupies a predictable fixed-width column.
  */
@@ -65,7 +88,7 @@ export function liveSessionShellPolicy(): LiveSessionShellPolicy {
     showGlobalNavigation: false,
     showAppRail: false,
     workspaceMode: "full-viewport",
-    sessionFlowPlacement: "compact-topbar",
+    sessionFlowPlacement: "contextual",
     sessionFlowOwner: "live-session-route",
     utilityPanel: "share-only-collapsible-sidebar",
     utilityDefault: "collapsed",
