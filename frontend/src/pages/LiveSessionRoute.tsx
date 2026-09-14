@@ -1,12 +1,18 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { CSSProperties } from "react";
+import { createPortal } from "react-dom";
 import { useParams } from "react-router-dom";
 import { SessionFlowCallDock } from "../components/SessionFlowCallDock";
 import {
   liveSessionDesktopGridTemplate,
   liveSessionShellPolicy,
 } from "../lib/liveSessionUi";
+import {
+  fullscreenButtonLabel,
+  toggleShareStageFullscreen,
+} from "../lib/shareStageFullscreen";
 import CallPage from "./CallPage";
+import "../shareStageFullscreen.css";
 
 export default function LiveSessionRoute() {
   const { roomId = "" } = useParams();
@@ -43,6 +49,50 @@ export default function LiveSessionRoute() {
       </button>
 
       <CallPage />
+      <ShareStageFullscreenControl />
     </div>
+  );
+}
+
+function ShareStageFullscreenControl() {
+  const [shareStage, setShareStage] = useState<HTMLElement | null>(null);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+
+  useEffect(() => {
+    const resolveShareStage = () => {
+      setShareStage(document.querySelector<HTMLElement>(".live-session-route .share-stage"));
+    };
+
+    resolveShareStage();
+    const observer = new MutationObserver(resolveShareStage);
+    observer.observe(document.body, { childList: true, subtree: true });
+    return () => observer.disconnect();
+  }, []);
+
+  useEffect(() => {
+    const handleFullscreenChange = () => {
+      setIsFullscreen(Boolean(shareStage && document.fullscreenElement === shareStage));
+    };
+
+    handleFullscreenChange();
+    document.addEventListener("fullscreenchange", handleFullscreenChange);
+    return () => document.removeEventListener("fullscreenchange", handleFullscreenChange);
+  }, [shareStage]);
+
+  if (!shareStage) return null;
+
+  return createPortal(
+    <button
+      type="button"
+      className="share-stage-fullscreen-button"
+      aria-pressed={isFullscreen}
+      onClick={() => {
+        void toggleShareStageFullscreen(shareStage).catch(() => {});
+      }}
+    >
+      <span aria-hidden="true">⛶</span>
+      {fullscreenButtonLabel(isFullscreen)}
+    </button>,
+    shareStage,
   );
 }
