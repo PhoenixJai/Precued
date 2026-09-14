@@ -5,6 +5,8 @@ export interface LiveSessionRailItem {
 
 export type LiveSessionMode = "grid" | "share";
 export type ParticipantGridLayout = "single" | "two-up" | "three-up" | "quad" | "gallery";
+export type LiveViewMode = "gallery" | "speaker" | "share";
+export type ParticipantMediaMode = "video" | "avatar";
 export type SharingSidebarSection = "share-visibility" | "share-actions" | "session-flow";
 export type SessionFlowSurface = "topbar" | "sidebar";
 
@@ -47,6 +49,29 @@ export function participantGridLayout(participantCount: number): ParticipantGrid
   if (participantCount === 3) return "three-up";
   if (participantCount === 4) return "quad";
   return "gallery";
+}
+
+/** View is always available. Shared-content focus becomes an additional option
+ * only while somebody is actively presenting. */
+export function availableLiveViewModes(mode: LiveSessionMode): LiveViewMode[] {
+  return mode === "share" ? ["share", "gallery", "speaker"] : ["gallery", "speaker"];
+}
+
+export function defaultLiveViewMode(mode: LiveSessionMode): LiveViewMode {
+  return mode === "share" ? "share" : "gallery";
+}
+
+/** Keep a user-selected view when it still exists in the current session mode.
+ * Ending a share while in share-focus falls back to gallery. */
+export function normalizeLiveViewMode(viewMode: LiveViewMode, mode: LiveSessionMode): LiveViewMode {
+  return availableLiveViewModes(mode).includes(viewMode) ? viewMode : defaultLiveViewMode(mode);
+}
+
+/** A muted LiveKit camera publication can still leave a video element mounted.
+ * Treat that as camera-off so the UI shows an intentional avatar state instead
+ * of a black video rectangle. */
+export function participantMediaMode(hasCameraTrack: boolean, cameraMuted: boolean): ParticipantMediaMode {
+  return hasCameraTrack && !cameraMuted ? "video" : "avatar";
 }
 
 /**
