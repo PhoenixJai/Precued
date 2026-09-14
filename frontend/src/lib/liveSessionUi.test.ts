@@ -6,6 +6,9 @@ import {
   liveSessionShellPolicy,
   liveSessionStatusCopy,
   participantGridLayout,
+  sessionFlowSurface,
+  sharingSidebarSections,
+  shouldShowSharingSidebar,
 } from "./liveSessionUi";
 
 describe("live session shell ui", () => {
@@ -39,6 +42,22 @@ describe("live session shell ui", () => {
 
   it("reserves a dedicated utility sidebar only for share mode", () => {
     expect(liveSessionDesktopGridTemplate()).toBe("minmax(0, 1fr) 360px");
+    expect(shouldShowSharingSidebar("grid", true)).toBe(false);
+    expect(shouldShowSharingSidebar("share", false)).toBe(false);
+    expect(shouldShowSharingSidebar("share", true)).toBe(true);
+  });
+
+  it("moves Session Flow into the contextual sharing drawer while sharing", () => {
+    expect(sessionFlowSurface("grid")).toBe("topbar");
+    expect(sessionFlowSurface("share")).toBe("sidebar");
+  });
+
+  it("keeps the sharing drawer focused on real in-session controls", () => {
+    expect(sharingSidebarSections()).toEqual([
+      "share-visibility",
+      "share-actions",
+      "session-flow",
+    ]);
   });
 
   it("treats an active session as a dedicated full-viewport conferencing workspace", () => {
@@ -46,7 +65,7 @@ describe("live session shell ui", () => {
       showGlobalNavigation: false,
       showAppRail: false,
       workspaceMode: "full-viewport",
-      sessionFlowPlacement: "compact-topbar",
+      sessionFlowPlacement: "contextual",
       sessionFlowOwner: "live-session-route",
       utilityPanel: "share-only-collapsible-sidebar",
       utilityDefault: "collapsed",
