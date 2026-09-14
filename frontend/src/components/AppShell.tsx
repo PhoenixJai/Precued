@@ -57,10 +57,18 @@ export function WorkspaceShell({ children }: { children: ReactNode }) {
   );
 }
 
-export function AppShell({ children, showNavigation = true }: { children: ReactNode; showNavigation?: boolean }) {
+type AppShellProps = {
+  children: ReactNode;
+  showNavigation?: boolean;
+  /** @deprecated Live Session historically used this to suppress marketing chrome. */
+  showTaglines?: boolean;
+};
+
+export function AppShell({ children, showNavigation, showTaglines }: AppShellProps) {
   const navigate = useNavigate();
   const auth = getAuthSession();
   const [menuOpen, setMenuOpen] = useState(false);
+  const navigationVisible = showNavigation ?? showTaglines !== false;
 
   function logOut() {
     clearSession();
@@ -69,8 +77,8 @@ export function AppShell({ children, showNavigation = true }: { children: ReactN
   }
 
   return (
-    <div className={`app-shell ${showNavigation ? "" : "app-shell-bare"}`.trim()}>
-      {showNavigation && (
+    <div className={`app-shell ${navigationVisible ? "" : "app-shell-bare"}`.trim()}>
+      {navigationVisible && (
         <header className="topbar">
           <Link to={auth ? "/profile" : "/"} className="brand-link">
             <Brand />
