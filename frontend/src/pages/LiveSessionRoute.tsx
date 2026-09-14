@@ -7,6 +7,7 @@ import {
   liveSessionDesktopGridTemplate,
   liveSessionMode,
   liveSessionShellPolicy,
+  participantGridLayout,
 } from "../lib/liveSessionUi";
 import {
   fullscreenButtonLabel,
@@ -20,6 +21,7 @@ import "../liveSessionGridFirst.css";
 export default function LiveSessionRoute() {
   const { roomId = "" } = useParams();
   const [hasActiveShare, setHasActiveShare] = useState(false);
+  const [gridLayout, setGridLayout] = useState(() => participantGridLayout(1));
   const [panelsOpen, setPanelsOpen] = useState(false);
   const shellPolicy = liveSessionShellPolicy();
   const mode = liveSessionMode(hasActiveShare);
@@ -28,17 +30,21 @@ export default function LiveSessionRoute() {
   } as CSSProperties;
 
   useEffect(() => {
-    const resolveMode = () => {
+    const resolveWorkspace = () => {
       const callGrid = document.querySelector<HTMLElement>(".live-session-route .call-grid");
       if (!callGrid) return;
+
       const nextHasActiveShare = Boolean(callGrid.querySelector(".share-stage"))
         && !Boolean(callGrid.querySelector(".empty-share-state"));
+      const participantCount = callGrid.querySelectorAll(".video-strip .video-tile").length;
+
       setHasActiveShare(nextHasActiveShare);
+      setGridLayout(participantGridLayout(participantCount));
       if (!nextHasActiveShare) setPanelsOpen(false);
     };
 
-    resolveMode();
-    const observer = new MutationObserver(resolveMode);
+    resolveWorkspace();
+    const observer = new MutationObserver(resolveWorkspace);
     observer.observe(document.body, { childList: true, subtree: true });
     return () => observer.disconnect();
   }, []);
@@ -49,11 +55,13 @@ export default function LiveSessionRoute() {
         "live-session-route",
         shellPolicy.showGlobalNavigation ? "" : "live-session-route--standalone",
         `session-mode-${mode}`,
+        `participant-layout-${gridLayout}`,
         panelsOpen ? "" : "panels-collapsed",
       ].filter(Boolean).join(" ")}
       data-session-flow-placement={shellPolicy.sessionFlowPlacement}
       data-workspace-mode={shellPolicy.workspaceMode}
       data-session-mode={mode}
+      data-participant-layout={gridLayout}
       style={layoutStyle}
     >
       {roomId && (
