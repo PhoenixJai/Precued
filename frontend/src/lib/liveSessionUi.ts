@@ -9,7 +9,10 @@ export interface LiveSessionShellPolicy {
   workspaceMode: "full-viewport";
   sessionFlowPlacement: "compact-topbar";
   sessionFlowOwner: "live-session-route";
-  utilityPanel: "collapsible-right";
+  utilityPanel: "collapsible-sidebar";
+  utilitySections: ["visibility", "participants"];
+  participantPlacement: "bottom-filmstrip";
+  collapseControl: "edge-caret";
 }
 
 export function liveSessionRailItems(): LiveSessionRailItem[] {
@@ -27,18 +30,16 @@ export function liveSessionStatusCopy(connected: boolean): "Live" | "Connecting"
 
 /**
  * Desktop active-session layout: shared content owns the flexible canvas and
- * visibility/participants live in a roomy utility column. The route can
- * collapse that utility column so screen shares and presentations become
- * effectively full width without changing any media or visibility state.
+ * a dedicated utility sidebar occupies a predictable fixed-width column.
  */
 export function liveSessionDesktopGridTemplate(): string {
-  return "minmax(0, 1fr) minmax(340px, 400px)";
+  return "minmax(0, 1fr) 360px";
 }
 
 /**
  * Active sessions intentionally leave the normal application chrome behind.
- * They behave like a conferencing workspace: full viewport, compact stage
- * context, and an optional right-side utility panel.
+ * The bottom row is reserved for participant media, while visibility and
+ * participant metadata live in one collapsible sidebar with an edge caret.
  */
 export function liveSessionShellPolicy(): LiveSessionShellPolicy {
   return {
@@ -47,6 +48,9 @@ export function liveSessionShellPolicy(): LiveSessionShellPolicy {
     workspaceMode: "full-viewport",
     sessionFlowPlacement: "compact-topbar",
     sessionFlowOwner: "live-session-route",
-    utilityPanel: "collapsible-right",
+    utilityPanel: "collapsible-sidebar",
+    utilitySections: ["visibility", "participants"],
+    participantPlacement: "bottom-filmstrip",
+    collapseControl: "edge-caret",
   };
 }
