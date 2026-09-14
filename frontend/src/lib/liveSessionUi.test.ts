@@ -7,7 +7,7 @@ import {
 } from "./liveSessionUi";
 
 describe("live session shell ui", () => {
-  it("uses Sessions terminology in the live workspace rail", () => {
+  it("keeps Sessions terminology available for non-live workspace navigation", () => {
     expect(liveSessionRailItems()).toEqual([
       { label: "Home", href: "/profile" },
       { label: "Templates", href: "/templates" },
@@ -21,15 +21,18 @@ describe("live session shell ui", () => {
     expect(liveSessionStatusCopy(false)).toBe("Connecting");
   });
 
-  it("reserves a dedicated participant rail instead of overlaying the main workspace", () => {
-    expect(liveSessionDesktopGridTemplate()).toBe("minmax(0, 1fr) 320px");
+  it("reserves a roomy utility panel while keeping the shared-content canvas flexible", () => {
+    expect(liveSessionDesktopGridTemplate()).toBe("minmax(0, 1fr) minmax(340px, 400px)");
   });
 
-  it("uses one standalone live shell with one inline Session Flow surface", () => {
+  it("treats an active session as a dedicated full-viewport conferencing workspace", () => {
     expect(liveSessionShellPolicy()).toEqual({
       showGlobalNavigation: false,
-      sessionFlowPlacement: "inline",
+      showAppRail: false,
+      workspaceMode: "full-viewport",
+      sessionFlowPlacement: "compact-topbar",
       sessionFlowOwner: "live-session-route",
+      utilityPanel: "collapsible-right",
     });
   });
 });
