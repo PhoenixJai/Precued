@@ -57,10 +57,13 @@ export function shouldShowSharingSidebar(mode: LiveSessionMode, canManageShare: 
   return mode === "share" && canManageShare;
 }
 
-/** Session Flow stays visible above the grid, then moves into the sharing
- * drawer once content becomes the primary stage. */
-export function sessionFlowSurface(mode: LiveSessionMode): SessionFlowSurface {
-  return mode === "share" ? "sidebar" : "topbar";
+/**
+ * Hosts/sharers move Session Flow into their contextual drawer while sharing.
+ * Guests keep the compact topbar so session structure remains visible without
+ * exposing host controls.
+ */
+export function sessionFlowSurface(mode: LiveSessionMode, canManageShare: boolean): SessionFlowSurface {
+  return mode === "share" && canManageShare ? "sidebar" : "topbar";
 }
 
 export function sharingSidebarSections(): SharingSidebarSection[] {
