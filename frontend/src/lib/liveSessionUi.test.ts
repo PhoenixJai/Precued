@@ -1,9 +1,11 @@
 import { describe, expect, it } from "vitest";
 import {
   liveSessionDesktopGridTemplate,
+  liveSessionMode,
   liveSessionRailItems,
   liveSessionShellPolicy,
   liveSessionStatusCopy,
+  participantGridLayout,
 } from "./liveSessionUi";
 
 describe("live session shell ui", () => {
@@ -21,7 +23,21 @@ describe("live session shell ui", () => {
     expect(liveSessionStatusCopy(false)).toBe("Connecting");
   });
 
-  it("reserves a dedicated utility sidebar while keeping the shared-content canvas flexible", () => {
+  it("uses participant grid mode until a share becomes active", () => {
+    expect(liveSessionMode(false)).toBe("grid");
+    expect(liveSessionMode(true)).toBe("share");
+  });
+
+  it("uses Zoom-like participant grid layouts", () => {
+    expect(participantGridLayout(1)).toBe("single");
+    expect(participantGridLayout(2)).toBe("two-up");
+    expect(participantGridLayout(3)).toBe("three-up");
+    expect(participantGridLayout(4)).toBe("quad");
+    expect(participantGridLayout(5)).toBe("gallery");
+    expect(participantGridLayout(9)).toBe("gallery");
+  });
+
+  it("reserves a dedicated utility sidebar only for share mode", () => {
     expect(liveSessionDesktopGridTemplate()).toBe("minmax(0, 1fr) 360px");
   });
 
@@ -32,9 +48,13 @@ describe("live session shell ui", () => {
       workspaceMode: "full-viewport",
       sessionFlowPlacement: "compact-topbar",
       sessionFlowOwner: "live-session-route",
-      utilityPanel: "collapsible-sidebar",
-      utilitySections: ["visibility", "participants"],
-      participantPlacement: "bottom-filmstrip",
+      utilityPanel: "share-only-collapsible-sidebar",
+      utilityDefault: "collapsed",
+      participantPlacement: {
+        grid: "main-grid",
+        share: "bottom-filmstrip",
+      },
+      fullscreenParticipants: "visible",
       collapseControl: "edge-caret",
     });
   });
