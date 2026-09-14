@@ -1,11 +1,15 @@
 import { describe, expect, it } from "vitest";
 import {
+  availableLiveViewModes,
+  defaultLiveViewMode,
   liveSessionDesktopGridTemplate,
   liveSessionMode,
   liveSessionRailItems,
   liveSessionShellPolicy,
   liveSessionStatusCopy,
+  normalizeLiveViewMode,
   participantGridLayout,
+  participantMediaMode,
   sessionFlowSurface,
   sharingSidebarSections,
   shouldShowSharingSidebar,
@@ -38,6 +42,24 @@ describe("live session shell ui", () => {
     expect(participantGridLayout(4)).toBe("quad");
     expect(participantGridLayout(5)).toBe("gallery");
     expect(participantGridLayout(9)).toBe("gallery");
+  });
+
+  it("makes View available even when the user is alone", () => {
+    expect(availableLiveViewModes("grid")).toEqual(["gallery", "speaker"]);
+    expect(defaultLiveViewMode("grid")).toBe("gallery");
+  });
+
+  it("adds shared-content focus while a share is active", () => {
+    expect(availableLiveViewModes("share")).toEqual(["share", "gallery", "speaker"]);
+    expect(defaultLiveViewMode("share")).toBe("share");
+    expect(normalizeLiveViewMode("share", "grid")).toBe("gallery");
+    expect(normalizeLiveViewMode("gallery", "share")).toBe("gallery");
+  });
+
+  it("renders an avatar instead of a black video surface when the camera is off", () => {
+    expect(participantMediaMode(false, false)).toBe("avatar");
+    expect(participantMediaMode(true, true)).toBe("avatar");
+    expect(participantMediaMode(true, false)).toBe("video");
   });
 
   it("reserves a dedicated utility sidebar only for share mode", () => {

@@ -1,0 +1,276 @@
+/* In-session View control and camera-off participant treatment. */
+
+.live-session-route .call-controls {
+  gap: 8px;
+}
+
+.live-view-control-wrap {
+  position: relative;
+  display: flex;
+  align-items: stretch;
+  order: 3;
+}
+
+.live-session-route .call-controls > .more-control-wrap {
+  order: 4;
+}
+
+.live-session-route .call-controls > .call-control.danger {
+  order: 5;
+}
+
+.live-view-control-button {
+  min-width: 58px;
+}
+
+.live-view-menu {
+  position: absolute;
+  left: 50%;
+  bottom: 76px;
+  z-index: 80;
+  width: 210px;
+  transform: translateX(-50%);
+  overflow: hidden;
+  border: 1px solid #d8e0eb;
+  border-radius: 12px;
+  background: rgba(255,255,255,.99);
+  color: #17243b;
+  box-shadow: 0 18px 40px rgba(7,18,37,.24);
+  padding: 7px;
+}
+
+.live-view-menu-heading {
+  padding: 7px 10px 8px;
+  color: #6c7890;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+
+.live-view-menu button {
+  width: 100%;
+  min-height: 40px;
+  display: grid;
+  grid-template-columns: 24px minmax(0,1fr) 18px;
+  align-items: center;
+  gap: 8px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: #293650;
+  text-align: left;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.live-view-menu button:hover,
+.live-view-menu button.active {
+  background: #eef3fb;
+  color: #17396e;
+}
+
+.live-view-check {
+  justify-self: end;
+  color: #2d63d6;
+}
+
+/* The active-session canvas should consume the viewport instead of looking
+   like a narrow page card. */
+.live-session-route.session-mode-grid .call-page {
+  padding: 6px 8px 10px;
+}
+
+.live-session-route.session-mode-grid .call-header-row {
+  min-height: 38px;
+  margin-bottom: 6px;
+}
+
+.live-session-route.session-mode-grid .call-grid {
+  border-radius: 12px;
+}
+
+.live-session-route.session-mode-grid .video-strip {
+  padding: 6px;
+}
+
+/* Camera-off LiveKit publications can leave a mounted black video element.
+   Replace that visual with the participant's identity state. */
+.live-session-route .video-tile {
+  position: relative;
+}
+
+.live-session-route .video-tile.camera-fallback video {
+  opacity: 0 !important;
+}
+
+.live-session-route .video-tile.camera-fallback::before {
+  content: attr(data-participant-initials);
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  display: grid;
+  place-items: center;
+  background: radial-gradient(circle at 50% 34%, #253b60 0%, #14233a 54%, #0a1425 100%);
+  color: #dce7fb;
+  font-size: clamp(44px, 8vw, 96px);
+  font-weight: 800;
+  letter-spacing: -.04em;
+}
+
+.live-session-route .video-tile.camera-fallback .video-label,
+.live-session-route .video-tile.camera-fallback .signal-bars {
+  position: absolute;
+  z-index: 3;
+}
+
+/* ---------------- User-selected grid views ---------------- */
+
+/* Gallery is the default participant-first view. */
+.live-session-route.session-mode-grid.session-view-gallery .video-strip {
+  width: 100%;
+  max-width: none;
+}
+
+/* Speaker view keeps one participant dominant and places the remaining tiles
+   in a compact row. With one participant, the single tile still fills the
+   available stage, so View remains meaningful without creating dead space. */
+.live-session-route.session-mode-grid.session-view-speaker .video-strip:has(.video-tile:nth-child(2)) {
+  grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+  grid-template-rows: minmax(0, 1fr) 118px !important;
+  grid-auto-rows: unset !important;
+}
+
+.live-session-route.session-mode-grid.session-view-speaker .video-strip:has(.video-tile:nth-child(2)) .video-tile:first-child {
+  grid-column: 1 / -1;
+  grid-row: 1;
+}
+
+.live-session-route.session-mode-grid.session-view-speaker .video-strip:has(.video-tile:nth-child(2)) .video-tile:not(:first-child) {
+  grid-row: 2;
+  min-height: 0;
+}
+
+/* ---------------- User-selected views during sharing ---------------- */
+
+/* Shared-content focus is the automatic share-mode view established by PR A. */
+.live-session-route.session-mode-share.session-view-share .share-stage {
+  display: flex;
+}
+
+/* Gallery view lets any participant temporarily prioritize people even while
+   the share remains active. The host's contextual sharing drawer remains
+   reachable through its caret. */
+.live-session-route.session-mode-share.session-view-gallery .share-stage,
+.live-session-route.session-mode-share.session-view-gallery .visible-banner {
+  display: none !important;
+}
+
+.live-session-route.session-mode-share.session-view-gallery .video-strip {
+  grid-column: 1 !important;
+  grid-row: 1 / span 2 !important;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  display: grid !important;
+  grid-auto-flow: unset !important;
+  grid-auto-columns: unset !important;
+  gap: 8px;
+  overflow: hidden;
+  padding: 6px;
+  background: #091223;
+  border-radius: 12px;
+}
+
+.live-session-route.session-mode-share.session-view-gallery.participant-layout-single .video-strip {
+  grid-template-columns: minmax(0,1fr);
+  grid-template-rows: minmax(0,1fr);
+}
+.live-session-route.session-mode-share.session-view-gallery.participant-layout-two-up .video-strip {
+  grid-template-columns: repeat(2,minmax(0,1fr));
+  grid-template-rows: minmax(0,1fr);
+}
+.live-session-route.session-mode-share.session-view-gallery.participant-layout-three-up .video-strip,
+.live-session-route.session-mode-share.session-view-gallery.participant-layout-quad .video-strip {
+  grid-template-columns: repeat(2,minmax(0,1fr));
+  grid-template-rows: repeat(2,minmax(0,1fr));
+}
+.live-session-route.session-mode-share.session-view-gallery.participant-layout-three-up .video-tile:nth-child(3) {
+  grid-column: 1 / -1;
+  width: calc(50% - 4px);
+  justify-self: center;
+}
+.live-session-route.session-mode-share.session-view-gallery.participant-layout-gallery .video-strip {
+  grid-template-columns: repeat(3,minmax(0,1fr));
+  grid-auto-rows: minmax(0,1fr);
+}
+
+/* Speaker view during a share prioritizes the first participant instead of the
+   shared content, while the share continues uninterrupted in the background. */
+.live-session-route.session-mode-share.session-view-speaker .share-stage,
+.live-session-route.session-mode-share.session-view-speaker .visible-banner {
+  display: none !important;
+}
+
+.live-session-route.session-mode-share.session-view-speaker .video-strip {
+  grid-column: 1 !important;
+  grid-row: 1 / span 2 !important;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  display: grid !important;
+  grid-template-columns: repeat(4,minmax(0,1fr));
+  grid-template-rows: minmax(0,1fr) 118px;
+  grid-auto-flow: unset !important;
+  grid-auto-columns: unset !important;
+  gap: 8px;
+  overflow: hidden;
+  padding: 6px;
+  background: #091223;
+  border-radius: 12px;
+}
+
+.live-session-route.session-mode-share.session-view-speaker .video-tile:first-child {
+  grid-column: 1 / -1;
+  grid-row: 1;
+}
+
+.live-session-route.session-mode-share.session-view-speaker .video-tile:not(:first-child) {
+  grid-row: 2;
+}
+
+.live-session-route.session-mode-share.session-view-speaker.participant-layout-single .video-strip {
+  grid-template-columns: 1fr;
+  grid-template-rows: 1fr;
+}
+
+/* Keep View reachable in browser fullscreen. The call controls are descendants
+   of the fullscreen call-grid, so this menu remains interactive there. */
+.live-session-route .call-grid:fullscreen .live-view-menu {
+  bottom: 78px;
+}
+
+@media (max-width: 1000px) {
+  .live-view-menu {
+    width: 190px;
+  }
+
+  .live-session-route.session-mode-share.session-view-gallery .video-strip,
+  .live-session-route.session-mode-share.session-view-speaker .video-strip {
+    grid-column: 1 !important;
+    grid-row: auto !important;
+    min-height: 58vh;
+  }
+}
+
+@media (max-width: 700px) {
+  .live-view-control-button {
+    min-width: 52px;
+  }
+
+  .live-view-menu {
+    left: auto;
+    right: -54px;
+    transform: none;
+  }
+}
