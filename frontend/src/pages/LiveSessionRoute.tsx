@@ -1,17 +1,16 @@
+import { useState } from "react";
 import type { CSSProperties } from "react";
-import { Link, useParams } from "react-router-dom";
+import { useParams } from "react-router-dom";
 import { SessionFlowCallDock } from "../components/SessionFlowCallDock";
 import {
   liveSessionDesktopGridTemplate,
-  liveSessionRailItems,
   liveSessionShellPolicy,
-  liveSessionStatusCopy,
 } from "../lib/liveSessionUi";
 import CallPage from "./CallPage";
 
 export default function LiveSessionRoute() {
   const { roomId = "" } = useParams();
-  const railItems = liveSessionRailItems();
+  const [panelsOpen, setPanelsOpen] = useState(true);
   const shellPolicy = liveSessionShellPolicy();
   const layoutStyle = {
     "--live-session-desktop-columns": liveSessionDesktopGridTemplate(),
@@ -19,46 +18,29 @@ export default function LiveSessionRoute() {
 
   return (
     <div
-      className={`live-session-route ${shellPolicy.showGlobalNavigation ? "" : "live-session-route--standalone"}`.trim()}
+      className={[
+        "live-session-route",
+        shellPolicy.showGlobalNavigation ? "" : "live-session-route--standalone",
+        panelsOpen ? "" : "panels-collapsed",
+      ].filter(Boolean).join(" ")}
       data-session-flow-placement={shellPolicy.sessionFlowPlacement}
+      data-workspace-mode={shellPolicy.workspaceMode}
       style={layoutStyle}
     >
-      <aside className="live-session-rail" aria-label="Live session workspace">
-        <div className="live-session-rail-mark" aria-hidden="true">
-          <span />
-          <span />
-          <span />
-          <span />
-          <span />
-        </div>
-        <nav className="live-session-rail-nav">
-          {railItems.map((item) => item.href ? (
-            <Link key={item.label} to={item.href} className="live-session-rail-item">
-              <span className="live-session-rail-icon" aria-hidden="true">{item.label.slice(0, 1)}</span>
-              <small>{item.label}</small>
-            </Link>
-          ) : (
-            <span
-              key={item.label}
-              className={`live-session-rail-item ${item.label === "Sessions" ? "active" : "disabled"}`}
-              aria-disabled="true"
-            >
-              <span className="live-session-rail-icon" aria-hidden="true">{item.label.slice(0, 1)}</span>
-              <small>{item.label}</small>
-            </span>
-          ))}
-        </nav>
-        <div className="live-session-rail-status">
-          <span className="live-session-status-dot" aria-hidden="true" />
-          <small>{liveSessionStatusCopy(true)}</small>
-        </div>
-      </aside>
-
       {roomId && (
         <div className="live-session-flow-layer">
           <SessionFlowCallDock roomId={roomId} />
         </div>
       )}
+
+      <button
+        type="button"
+        className="live-session-panel-toggle"
+        aria-expanded={panelsOpen}
+        onClick={() => setPanelsOpen((open) => !open)}
+      >
+        {panelsOpen ? "Hide panels" : "Show panels"}
+      </button>
 
       <CallPage />
     </div>
