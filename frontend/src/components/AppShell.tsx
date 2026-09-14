@@ -1,11 +1,10 @@
 import type { ReactNode } from "react";
 import { useState } from "react";
-import { Link, useMatch, useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { navigateToProfile } from "../lib/accountMenuNavigation";
 import { PRIMARY_NAVIGATION, WORKSPACE_NAVIGATION, type AppNavigationItem } from "../lib/appNavigation";
 import { initials } from "../lib/initials";
 import { clearSession, getAuthSession } from "../lib/session";
-import { SessionFlowCallDock } from "./SessionFlowCallDock";
 
 export function Brand() {
   return (
@@ -58,9 +57,8 @@ export function WorkspaceShell({ children }: { children: ReactNode }) {
   );
 }
 
-export function AppShell({ children, showTaglines = true }: { children: ReactNode; showTaglines?: boolean }) {
+export function AppShell({ children, showNavigation = true }: { children: ReactNode; showNavigation?: boolean }) {
   const navigate = useNavigate();
-  const callMatch = useMatch("/rooms/:roomId/call");
   const auth = getAuthSession();
   const [menuOpen, setMenuOpen] = useState(false);
 
@@ -71,38 +69,37 @@ export function AppShell({ children, showTaglines = true }: { children: ReactNod
   }
 
   return (
-    <div className="app-shell">
-      <header className="topbar">
-        <Link to={auth ? "/profile" : "/"} className="brand-link">
-          <Brand />
-        </Link>
-        <NavigationItems items={PRIMARY_NAVIGATION} className="topnav" />
-        <div className="topbar-actions">
-          <button className="secondary-button compact">Get in touch</button>
-          {auth && (
-            <div className="account-menu-wrap">
-              <button className="avatar-button" aria-label="Account menu" onClick={() => setMenuOpen(!menuOpen)}>
-                {initials(auth.displayName)}⌄
-              </button>
-              {menuOpen && (
-                <div className="account-menu">
-                  <button
-                    type="button"
-                    onClick={() => navigateToProfile(navigate, () => setMenuOpen(false))}
-                  >
-                    Profile
-                  </button>
-                  <button type="button" onClick={logOut}>Log out</button>
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-      </header>
-      <main className="page-background">
-        {!showTaglines && callMatch?.params.roomId && <SessionFlowCallDock roomId={callMatch.params.roomId} />}
-        {children}
-      </main>
+    <div className={`app-shell ${showNavigation ? "" : "app-shell-bare"}`.trim()}>
+      {showNavigation && (
+        <header className="topbar">
+          <Link to={auth ? "/profile" : "/"} className="brand-link">
+            <Brand />
+          </Link>
+          <NavigationItems items={PRIMARY_NAVIGATION} className="topnav" />
+          <div className="topbar-actions">
+            <button className="secondary-button compact">Get in touch</button>
+            {auth && (
+              <div className="account-menu-wrap">
+                <button className="avatar-button" aria-label="Account menu" onClick={() => setMenuOpen(!menuOpen)}>
+                  {initials(auth.displayName)}⌄
+                </button>
+                {menuOpen && (
+                  <div className="account-menu">
+                    <button
+                      type="button"
+                      onClick={() => navigateToProfile(navigate, () => setMenuOpen(false))}
+                    >
+                      Profile
+                    </button>
+                    <button type="button" onClick={logOut}>Log out</button>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        </header>
+      )}
+      <main className="page-background">{children}</main>
     </div>
   );
 }
