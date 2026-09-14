@@ -5,12 +5,14 @@ export interface LiveSessionRailItem {
 
 export type LiveSessionMode = "grid" | "share";
 export type ParticipantGridLayout = "single" | "two-up" | "three-up" | "quad" | "gallery";
+export type SharingSidebarSection = "share-visibility" | "share-actions" | "session-flow";
+export type SessionFlowSurface = "topbar" | "sidebar";
 
 export interface LiveSessionShellPolicy {
   showGlobalNavigation: boolean;
   showAppRail: boolean;
   workspaceMode: "full-viewport";
-  sessionFlowPlacement: "compact-topbar";
+  sessionFlowPlacement: "contextual";
   sessionFlowOwner: "live-session-route";
   utilityPanel: "share-only-collapsible-sidebar";
   utilityDefault: "collapsed";
@@ -48,6 +50,24 @@ export function participantGridLayout(participantCount: number): ParticipantGrid
 }
 
 /**
+ * Host/sharer controls are contextual. Grid mode stays participant-first and
+ * guests never receive a host control drawer.
+ */
+export function shouldShowSharingSidebar(mode: LiveSessionMode, canManageShare: boolean): boolean {
+  return mode === "share" && canManageShare;
+}
+
+/** Session Flow stays visible above the grid, then moves into the sharing
+ * drawer once content becomes the primary stage. */
+export function sessionFlowSurface(mode: LiveSessionMode): SessionFlowSurface {
+  return mode === "share" ? "sidebar" : "topbar";
+}
+
+export function sharingSidebarSections(): SharingSidebarSection[] {
+  return ["share-visibility", "share-actions", "session-flow"];
+}
+
+/**
  * Desktop share-mode layout: shared content owns the flexible canvas and a
  * dedicated utility sidebar occupies a predictable fixed-width column.
  */
@@ -65,7 +85,7 @@ export function liveSessionShellPolicy(): LiveSessionShellPolicy {
     showGlobalNavigation: false,
     showAppRail: false,
     workspaceMode: "full-viewport",
-    sessionFlowPlacement: "compact-topbar",
+    sessionFlowPlacement: "contextual",
     sessionFlowOwner: "live-session-route",
     utilityPanel: "share-only-collapsible-sidebar",
     utilityDefault: "collapsed",
