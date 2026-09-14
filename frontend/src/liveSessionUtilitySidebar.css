@@ -1,0 +1,126 @@
+/* Live-session utility sidebar refinement.
+   Shared content owns the upper-left canvas, participant media owns the full
+   bottom row, and host settings live in one dedicated collapsible sidebar. */
+
+.live-session-route .call-grid {
+  grid-template-columns: var(--live-session-desktop-columns, minmax(0, 1fr) 360px);
+  grid-template-rows: minmax(0, 1fr) 116px;
+  gap: 10px;
+}
+
+/* The settings surface is the sidebar. It spans the full upper workspace and
+   scrolls internally rather than creating separate floating cards. */
+.live-session-route .visibility-controls {
+  grid-column: 2;
+  grid-row: 1;
+  height: 100%;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  border-radius: 14px;
+  box-shadow: 0 8px 24px rgba(20, 33, 61, .08);
+}
+
+/* Participant presence is represented by the media filmstrip, so the legacy
+   participant card no longer competes with settings for sidebar space. */
+.live-session-route .participants-sidebar {
+  display: none;
+}
+
+/* Participant video/image tiles form the entire bottom row, even while the
+   settings sidebar is open. */
+.live-session-route .video-strip {
+  grid-column: 1 / -1;
+  grid-row: 2;
+  grid-auto-columns: minmax(150px, 190px);
+  align-items: stretch;
+  padding-right: 2px;
+}
+
+.live-session-route .video-tile {
+  height: 100%;
+}
+
+/* The sidebar is controlled by a handle attached to its left edge instead of
+   a detached bottom-left "Hide panels" pill. */
+.live-session-sidebar-caret {
+  position: fixed;
+  right: 348px;
+  top: 50%;
+  z-index: 40;
+  width: 28px;
+  height: 58px;
+  display: grid;
+  place-items: center;
+  transform: translateY(-50%);
+  border: 1px solid #cfd8e6;
+  border-right: 0;
+  border-radius: 12px 0 0 12px;
+  background: rgba(255, 255, 255, .98);
+  color: var(--precued-navy-900);
+  box-shadow: -5px 6px 18px rgba(20, 33, 61, .12);
+  font-size: 25px;
+  line-height: 1;
+  cursor: pointer;
+  transition: right .18s ease, background .16s ease;
+}
+
+.live-session-sidebar-caret:hover {
+  background: #f5f8fd;
+}
+
+.live-session-route.panels-collapsed .call-grid {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.live-session-route.panels-collapsed .visibility-controls {
+  display: none;
+}
+
+.live-session-route.panels-collapsed .share-stage {
+  grid-column: 1;
+}
+
+.live-session-route.panels-collapsed .video-strip {
+  grid-column: 1;
+}
+
+.live-session-route.panels-collapsed .live-session-sidebar-caret {
+  right: 0;
+}
+
+/* Guest sessions do not expose host settings, so there is no empty utility
+   sidebar or orphaned collapse handle. */
+.live-session-route:not(:has(.visibility-controls)) .call-grid {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.live-session-route:not(:has(.visibility-controls)) .live-session-sidebar-caret {
+  display: none;
+}
+
+@media (max-width: 1000px) {
+  .live-session-route .call-grid {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto;
+  }
+
+  .live-session-route .visibility-controls,
+  .live-session-route .share-stage,
+  .live-session-route .video-strip {
+    grid-column: 1;
+    grid-row: auto;
+  }
+
+  .live-session-route .visibility-controls {
+    max-height: 50vh;
+  }
+
+  .live-session-route .video-strip {
+    min-height: 118px;
+  }
+
+  .live-session-sidebar-caret {
+    display: none;
+  }
+}
