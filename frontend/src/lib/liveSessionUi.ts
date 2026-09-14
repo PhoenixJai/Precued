@@ -10,6 +10,13 @@ export type ParticipantMediaMode = "video" | "avatar";
 export type SharingSidebarSection = "share-visibility" | "share-actions" | "session-flow";
 export type SessionFlowSurface = "topbar" | "sidebar";
 
+export interface LiveViewLayoutPolicy {
+  workspaceOverflow: "auto" | "hidden";
+  participantArrangement: "responsive-grid" | "speaker-focus" | "share-focus";
+  primarySizing: "balanced" | "dominant" | "contain";
+  secondaryPlacement: "grid" | "bottom-filmstrip";
+}
+
 export interface LiveSessionShellPolicy {
   showGlobalNavigation: boolean;
   showAppRail: boolean;
@@ -72,6 +79,37 @@ export function normalizeLiveViewMode(viewMode: LiveViewMode, mode: LiveSessionM
  * of a black video rectangle. */
 export function participantMediaMode(hasCameraTrack: boolean, cameraMuted: boolean): ParticipantMediaMode {
   return hasCameraTrack && !cameraMuted ? "video" : "avatar";
+}
+
+/**
+ * Layout policy for user-selectable in-session views. Gallery is allowed to
+ * grow vertically so participant tiles are never crushed to satisfy a fixed
+ * viewport. Speaker and shared-content views keep a stable dominant stage and
+ * place secondary participants into a compact filmstrip.
+ */
+export function liveViewLayoutPolicy(viewMode: LiveViewMode): LiveViewLayoutPolicy {
+  if (viewMode === "speaker") {
+    return {
+      workspaceOverflow: "hidden",
+      participantArrangement: "speaker-focus",
+      primarySizing: "dominant",
+      secondaryPlacement: "bottom-filmstrip",
+    };
+  }
+  if (viewMode === "share") {
+    return {
+      workspaceOverflow: "hidden",
+      participantArrangement: "share-focus",
+      primarySizing: "contain",
+      secondaryPlacement: "bottom-filmstrip",
+    };
+  }
+  return {
+    workspaceOverflow: "auto",
+    participantArrangement: "responsive-grid",
+    primarySizing: "balanced",
+    secondaryPlacement: "grid",
+  };
 }
 
 /**

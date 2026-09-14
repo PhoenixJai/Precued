@@ -7,6 +7,7 @@ import {
   liveSessionRailItems,
   liveSessionShellPolicy,
   liveSessionStatusCopy,
+  liveViewLayoutPolicy,
   normalizeLiveViewMode,
   participantGridLayout,
   participantMediaMode,
@@ -60,6 +61,33 @@ describe("live session shell ui", () => {
     expect(participantMediaMode(false, false)).toBe("avatar");
     expect(participantMediaMode(true, true)).toBe("avatar");
     expect(participantMediaMode(true, false)).toBe("video");
+  });
+
+  it("allows Gallery to grow and scroll instead of vertically crushing participant tiles", () => {
+    expect(liveViewLayoutPolicy("gallery")).toEqual({
+      workspaceOverflow: "auto",
+      participantArrangement: "responsive-grid",
+      primarySizing: "balanced",
+      secondaryPlacement: "grid",
+    });
+  });
+
+  it("uses one dominant participant plus a compact secondary strip in Speaker view", () => {
+    expect(liveViewLayoutPolicy("speaker")).toEqual({
+      workspaceOverflow: "hidden",
+      participantArrangement: "speaker-focus",
+      primarySizing: "dominant",
+      secondaryPlacement: "bottom-filmstrip",
+    });
+  });
+
+  it("keeps shared content contained and reserves a compact participant strip", () => {
+    expect(liveViewLayoutPolicy("share")).toEqual({
+      workspaceOverflow: "hidden",
+      participantArrangement: "share-focus",
+      primarySizing: "contain",
+      secondaryPlacement: "bottom-filmstrip",
+    });
   });
 
   it("reserves a dedicated utility sidebar only for share mode", () => {
