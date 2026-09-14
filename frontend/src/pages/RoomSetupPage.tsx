@@ -4,10 +4,21 @@ import { AppShell } from "../components/AppShell";
 import { api } from "../lib/api";
 import { roomTemplateTitle } from "../lib/customTemplateLaunch";
 import { initials } from "../lib/initials";
-import { buildInviteJoinUrl, inviteStatusLabel, roleCapacityLabel } from "../lib/inviteReadiness";
+import { buildInviteJoinUrl, inviteStatusLabel } from "../lib/inviteReadiness";
 import { buildRoleSetupRows } from "../lib/roleSetup";
+import {
+  formatSessionStageDuration,
+  sessionRoleState,
+  sessionRoleStatusLabel,
+} from "../lib/sessionSetupUi";
 import { getParticipant } from "../lib/session";
-import type { Room, RoomInvite, RoomParticipantWithGrants, RoomRole } from "../types/precued";
+import type {
+  Room,
+  RoomInvite,
+  RoomParticipantWithGrants,
+  RoomRole,
+  SessionFlow,
+} from "../types/precued";
 import "../inviteSetup.css";
 
 export default function RoomSetupPage() {
@@ -18,6 +29,7 @@ export default function RoomSetupPage() {
   const [roles, setRoles] = useState<RoomRole[]>([]);
   const [participants, setParticipants] = useState<RoomParticipantWithGrants[]>([]);
   const [invites, setInvites] = useState<RoomInvite[]>([]);
+  const [sessionFlow, setSessionFlow] = useState<SessionFlow | null>(null);
   const [namedEmails, setNamedEmails] = useState<Record<string, string>>({});
   const [poolUses, setPoolUses] = useState<Record<string, string>>({});
   const [creatingForRole, setCreatingForRole] = useState<string | null>(null);
@@ -34,21 +46,23 @@ export default function RoomSetupPage() {
     let cancelled = false;
     async function refresh() {
       try {
-        const [nextRoom, nextRoles, nextParticipants, nextInvites] = await Promise.all([
+        const [nextRoom, nextRoles, nextParticipants, nextInvites, nextSessionFlow] = await Promise.all([
           api.getRoom(roomId),
           api.getRoomRoles(roomId),
           api.getRoomParticipants(roomId),
           api.listRoomInvites(roomId),
+          api.getSessionFlow(roomId),
         ]);
         if (!cancelled) {
           setRoom(nextRoom);
           setRoles(nextRoles);
           setParticipants(nextParticipants);
           setInvites(nextInvites);
+          setSessionFlow(nextSessionFlow);
           setError(null);
         }
       } catch (err) {
-        if (!cancelled) setError(err instanceof Error ? err.message : "Unable to load room setup");
+        if (!cancelled) setError(err instanceof Error ? err.message : "Unable to load session setup");
       }
     }
 
@@ -72,6 +86,11 @@ export default function RoomSetupPage() {
     }
     return grouped;
   }, [invites]);
+
+  const orderedStages = useMemo(
+    () => sessionFlow?.stages.slice().sort((a, b) => a.sortOrder - b.sortOrder) ?? [],
+    [sessionFlow],
+  );
 
   async function copyInvite(invite: RoomInvite) {
     const url = buildInviteJoinUrl(window.location.origin, invite.token);
@@ -143,24 +162,27 @@ export default function RoomSetupPage() {
 
   return (
     <AppShell showTaglines={false}>
-      <section className="setup-page page-center-wide">
+      <section className="setup-page session-setup-page page-center-wide">
         <button className="text-button back-button" onClick={() => navigate("/templates")}>← Back to templates</button>
-        <div className="page-heading setup-heading">
-          <h1>Set up your {templateTitle}</h1>
-          <p>Create and track invitation links before starting the session.</p>
-        </div>
 
-        <div className="setup-layout">
-          <div className="surface-card setup-main-card invite-tracker-card">
-            <div className="card-heading-row setup-card-heading">
-              <div className="icon-tile">♙</div>
+        <header className="session-setup-heading">
+          <span className="eyebrow">SESSION SETUP</span>
+          <h1>Prepare your {templateTitle} session</h1>
+          <p>Invite participants by role, track who has joined, and start whenever the session is ready.</p>
+        </header>
+
+        <div className="session-setup-layout">
+          <main className="surface-card session-roster-card">
+            <div className="session-card-heading">
               <div>
-                <h2>Participants & invitations</h2>
-                <p>Named invitations are tracked by email. Precued creates the link here; it does not email it automatically yet.</p>
+                <span className="session-section-kicker">Participants</span>
+                <h2>Role roster & invitations</h2>
+                <p>Precued creates invitation links here. Named invitations use email as a tracking label and are not emailed automatically.</p>
               </div>
+              <span className="session-role-count">{rows.length} role{rows.length === 1 ? "" : "s"}</span>
             </div>
 
-            <div className="invite-role-list">
+            <div className="session-role-list">
               {rows.map((row) => {
                 const roleInvites = invitesByRole[row.role.id] ?? [];
                 const pendingUses = roleInvites
@@ -194,36 +216,80 @@ export default function RoomSetupPage() {
                 );
               })}
             </div>
-          </div>
+          </main>
 
-          <aside className="surface-card readiness-card">
-            <div className="card-heading-row">
-              <div className="icon-tile">✓</div>
-              <div><h2>Room readiness</h2><p>Everyone can join in any order — start whenever you're ready.</p></div>
-            </div>
-            <div className="readiness-list">
-              <div className="readiness-item">
-                <span className="readiness-dot done">✓</span>
-                <div><strong>Host ready</strong><small>{me?.displayName ?? "You"} — {rows.find((row) => row.role.isHostRole)?.role.name ?? "Host"}</small></div>
+          <aside className="surface-card session-readiness-card">
+            <div className="session-card-heading compact-heading">
+              <div>
+                <span className="session-section-kicker">Readiness</span>
+                <h2>Session readiness</h2>
+                <p>Participants can join in any order. You decide when to begin.</p>
               </div>
-              {rows.filter((row) => !row.role.isHostRole).map((row) => (
-                <div className="readiness-item" key={row.role.id}>
-                  <span className={`readiness-dot ${row.joinedParticipants.length > 0 ? "done" : ""}`}>
-                    {row.joinedParticipants.length > 0 ? "✓" : ""}
-                  </span>
-                  <div>
-                    <strong>{row.role.name}</strong>
-                    <small>{roleCapacityLabel(row.joinedParticipants.length, row.role.maxMembers)}</small>
-                    {row.joinedParticipants.length > 0 && (
-                      <small>{row.joinedParticipants.map((participant) => participant.displayName).join(", ")}</small>
-                    )}
-                  </div>
-                </div>
-              ))}
             </div>
-            <button className="primary-button wide" onClick={() => navigate(`/rooms/${roomId}/call`)}>▣ Start Call</button>
+
+            <div className="session-readiness-list">
+              {rows.map((row) => {
+                const isHost = row.role.isHostRole;
+                const state = sessionRoleState(isHost, row.joinedParticipants.length);
+                const participantNames = isHost
+                  ? (me?.displayName ?? "You")
+                  : row.joinedParticipants.map((participant) => participant.displayName).join(", ");
+                return (
+                  <div className="session-readiness-item" key={row.role.id}>
+                    <span className={`session-readiness-dot ${state}`} aria-hidden="true">
+                      {state === "ready" ? "✓" : ""}
+                    </span>
+                    <div>
+                      <strong>{row.role.name}</strong>
+                      <small>{sessionRoleStatusLabel(isHost, row.joinedParticipants.length, row.role.maxMembers)}</small>
+                      {participantNames && <small className="session-readiness-names">{participantNames}</small>}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            <button className="primary-button wide session-start-button" onClick={() => navigate(`/rooms/${roomId}/call`)}>
+              Start Session →
+            </button>
+
+            <div className="session-structure-preview">
+              <div className="session-structure-preview-heading">
+                <div>
+                  <span className="session-section-kicker">Structure</span>
+                  <h3>Session flow</h3>
+                </div>
+                {sessionFlow?.enabled && orderedStages.length > 0 && (
+                  <span>{orderedStages.length} stage{orderedStages.length === 1 ? "" : "s"}</span>
+                )}
+              </div>
+
+              {!sessionFlow ? (
+                <p className="session-structure-empty">Loading session structure…</p>
+              ) : !sessionFlow.enabled ? (
+                <p className="session-structure-empty">This session does not use a guided Session Structure.</p>
+              ) : orderedStages.length === 0 ? (
+                <p className="session-structure-empty">Session Structure is enabled, but no stages are configured.</p>
+              ) : (
+                <ol className="session-structure-stage-list">
+                  {orderedStages.slice(0, 5).map((stage, index) => (
+                    <li key={stage.id}>
+                      <span className="session-stage-index">{index + 1}</span>
+                      <div>
+                        <strong>{stage.name}</strong>
+                        <small>{formatSessionStageDuration(stage.durationSeconds)}</small>
+                      </div>
+                    </li>
+                  ))}
+                </ol>
+              )}
+              {orderedStages.length > 5 && (
+                <p className="session-structure-more">+ {orderedStages.length - 5} more stage{orderedStages.length - 5 === 1 ? "" : "s"}</p>
+              )}
+            </div>
           </aside>
         </div>
+
         {error && <div className="error-banner">{error}</div>}
       </section>
     </AppShell>
@@ -249,75 +315,92 @@ function RoleInviteTracker(props: {
   onCopy: (invite: RoomInvite) => void;
   onExpire: (invite: RoomInvite) => void;
 }) {
-  const joinedNames = props.joinedParticipants.map((participant) => participant.displayName).join(", ");
   const noBoundedSeats = props.availableSeats !== null && props.availableSeats <= 0;
+  const pendingInviteCount = props.invites.filter((invite) => invite.status === "PENDING").length;
+  const state = sessionRoleState(props.isMe, props.joinedParticipants.length);
 
   return (
-    <article className="invite-role-panel">
-      <div className="invite-role-heading">
-        <div className="role-summary">
-          <div className="round-role-icon">♙</div>
+    <article className="session-role-panel">
+      <div className="session-role-heading">
+        <div className="session-role-identity">
+          <span className="session-role-icon">{props.role.name.slice(0, 1).toUpperCase()}</span>
           <div>
-            <h3>{props.role.name} {props.isMe && <span className="host-badge">Host</span>}</h3>
-            <small>{props.isMe ? "Room host" : roleCapacityLabel(props.joinedParticipants.length, props.role.maxMembers)}</small>
+            <div className="session-role-title-line">
+              <h3>{props.role.name}</h3>
+              {props.role.isHostRole && <span className="host-badge">Host</span>}
+              {props.role.isGuestRole && <span className="session-role-badge">Guest</span>}
+            </div>
+            <small>{props.isMe ? "Session host" : sessionRoleStatusLabel(false, props.joinedParticipants.length, props.role.maxMembers)}</small>
           </div>
         </div>
-        <span className={`status-pill ${props.isMe || props.joinedParticipants.length > 0 ? "ready" : "waiting"}`}>
-          ● {props.isMe ? "Ready (Host)" : roleCapacityLabel(props.joinedParticipants.length, props.role.maxMembers)}
+        <span className={`status-pill ${state}`}>
+          {sessionRoleStatusLabel(props.isMe, props.joinedParticipants.length, props.role.maxMembers)}
         </span>
       </div>
 
-      {props.isMe ? (
-        <div className="joined-person invite-host-person">
-          <span className="avatar-placeholder">{initials(props.meDisplayName ?? props.role.name)}</span>
-          <div><strong>{props.meDisplayName ?? "You"}</strong><small>{props.role.name}</small></div>
-        </div>
-      ) : (
-        <>
-          {props.joinedParticipants.length > 0 && (
-            <div className="invite-joined-summary">
-              <strong>Joined</strong>
-              <span>{joinedNames}</span>
+      <div className="session-participant-strip">
+        {props.isMe ? (
+          <div className="session-person-chip">
+            <span className="avatar-placeholder">{initials(props.meDisplayName ?? props.role.name)}</span>
+            <div><strong>{props.meDisplayName ?? "You"}</strong><small>Joined · Host</small></div>
+          </div>
+        ) : props.joinedParticipants.length > 0 ? (
+          props.joinedParticipants.map((participant) => (
+            <div className="session-person-chip" key={participant.id}>
+              <span className="avatar-placeholder">{initials(participant.displayName)}</span>
+              <div><strong>{participant.displayName}</strong><small>Joined</small></div>
             </div>
-          )}
+          ))
+        ) : (
+          <p className="session-role-empty">No one has joined this role yet.</p>
+        )}
+      </div>
 
-          {props.invites.length > 0 && (
-            <div className="invite-record-list">
-              {props.invites.map((invite) => (
-                <div className="invite-record" key={invite.id}>
-                  <div className="invite-record-main">
-                    <strong>{invite.mode === "NAMED" ? invite.inviteeEmail : "Shared role link"}</strong>
-                    <small>
-                      {inviteStatusLabel(invite.status)}
-                      {invite.mode === "POOL" ? ` · ${invite.usesCount}/${invite.maxUses} uses` : ""}
-                    </small>
-                  </div>
-                  {invite.status === "PENDING" && (
-                    <div className="invite-record-actions">
-                      <button className="secondary-button compact" onClick={() => props.onCopy(invite)}>
-                        {props.copiedInviteId === invite.id ? "Copied" : "Copy link"}
-                      </button>
-                      <button
-                        className="secondary-button compact"
-                        disabled={props.expiringInviteId === invite.id}
-                        onClick={() => props.onExpire(invite)}
-                      >
-                        {props.expiringInviteId === invite.id ? "Cancelling…" : "Cancel"}
-                      </button>
-                    </div>
-                  )}
+      {!props.isMe && props.invites.length > 0 && (
+        <div className="session-invite-record-list">
+          {props.invites.map((invite) => (
+            <div className="session-invite-record" key={invite.id}>
+              <div className="session-invite-record-main">
+                <span className="session-invite-type">{invite.mode === "NAMED" ? "Named invite" : "Shared role link"}</span>
+                <strong>{invite.mode === "NAMED" ? invite.inviteeEmail : "Reusable invitation link"}</strong>
+                <small>
+                  {inviteStatusLabel(invite.status)}
+                  {invite.mode === "POOL" ? ` · ${invite.usesCount}/${invite.maxUses} uses` : ""}
+                </small>
+              </div>
+              {invite.status === "PENDING" && (
+                <div className="session-invite-record-actions">
+                  <button className="secondary-button compact" onClick={() => props.onCopy(invite)}>
+                    {props.copiedInviteId === invite.id ? "Copied" : "Copy link"}
+                  </button>
+                  <button
+                    className="text-button session-cancel-invite"
+                    disabled={props.expiringInviteId === invite.id}
+                    onClick={() => props.onExpire(invite)}
+                  >
+                    {props.expiringInviteId === invite.id ? "Cancelling…" : "Cancel"}
+                  </button>
                 </div>
-              ))}
+              )}
             </div>
-          )}
+          ))}
+        </div>
+      )}
 
-          <div className="invite-create-grid">
-            <div className="invite-create-block">
+      {!props.isMe && (
+        <details className="session-invite-tools">
+          <summary>
+            <span>Invite people to this role</span>
+            <small>{pendingInviteCount > 0 ? `${pendingInviteCount} pending invite${pendingInviteCount === 1 ? "" : "s"}` : "Named invite or shared link"}</small>
+          </summary>
+          <div className="session-invite-create-grid">
+            <div className="session-invite-create-block">
               <strong>Invite a specific person</strong>
-              <small>Email is used as a tracking label; copy the generated link to send it.</small>
-              <div className="invite-create-row">
+              <small>Use an email as the tracking label, then copy the generated link to send it.</small>
+              <div className="session-invite-create-row">
                 <input
                   type="email"
+                  aria-label={`Email for ${props.role.name} invitation`}
                   placeholder="candidate@example.com"
                   value={props.namedEmail}
                   disabled={props.busy || noBoundedSeats}
@@ -331,20 +414,21 @@ function RoleInviteTracker(props: {
               </div>
             </div>
 
-            <div className="invite-create-block">
+            <div className="session-invite-create-block">
               <strong>Create a shared role link</strong>
               <small>
                 {props.role.maxMembers === null
                   ? "Choose how many people may use this link."
                   : `Uses the remaining unreserved seats${props.availableSeats !== null ? ` (${props.availableSeats})` : ""}.`}
               </small>
-              <div className="invite-create-row">
+              <div className="session-invite-create-row">
                 {props.role.maxMembers === null && (
                   <input
                     className="invite-uses-input"
                     type="number"
                     min={1}
                     step={1}
+                    aria-label={`Uses for ${props.role.name} shared link`}
                     placeholder="Uses"
                     value={props.poolUses}
                     disabled={props.busy}
@@ -359,7 +443,7 @@ function RoleInviteTracker(props: {
               </div>
             </div>
           </div>
-        </>
+        </details>
       )}
     </article>
   );

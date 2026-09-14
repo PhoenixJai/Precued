@@ -1,189 +1,604 @@
-.invite-tracker-card {
-  align-self: start;
+.session-setup-page {
+  padding-top: 28px;
 }
 
-.invite-role-list {
+.session-setup-heading {
+  margin: 0 10px 26px;
+}
+
+.session-setup-heading h1 {
+  margin: 0;
+  max-width: 780px;
+  color: var(--precued-navy-950);
+  font-size: clamp(34px, 4vw, 46px);
+  line-height: 1.05;
+  letter-spacing: -.045em;
+}
+
+.session-setup-heading p {
+  max-width: 720px;
+  margin: 10px 0 0;
+  color: var(--precued-muted);
+  font-size: 16px;
+  line-height: 1.55;
+}
+
+.session-setup-layout {
   display: grid;
-  gap: 14px;
+  grid-template-columns: minmax(0, 1fr) minmax(300px, 350px);
+  gap: 20px;
+  align-items: start;
 }
 
-.invite-role-panel {
-  border: 1px solid #e2e7f0;
+.session-roster-card,
+.session-readiness-card {
+  padding: 24px;
+}
+
+.session-card-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20px;
+  padding-bottom: 20px;
+  border-bottom: 1px solid var(--precued-border);
+}
+
+.session-card-heading.compact-heading {
+  padding-bottom: 0;
+  border-bottom: 0;
+}
+
+.session-card-heading h2 {
+  margin: 3px 0 6px;
+  color: var(--precued-navy-950);
+  font-size: 20px;
+  letter-spacing: -.02em;
+}
+
+.session-card-heading p {
+  max-width: 680px;
+  margin: 0;
+  color: var(--precued-muted);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.session-section-kicker {
+  color: var(--precued-blue-600);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: .13em;
+  text-transform: uppercase;
+}
+
+.session-role-count {
+  flex: 0 0 auto;
+  border: 1px solid var(--precued-border);
+  border-radius: 999px;
+  padding: 6px 10px;
+  background: #f8faff;
+  color: #66728b;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.session-role-list {
+  display: grid;
+  gap: 12px;
+  margin-top: 18px;
+}
+
+.session-role-panel {
+  overflow: hidden;
+  border: 1px solid var(--precued-border);
   border-radius: 14px;
-  padding: 18px;
+  background: var(--precued-surface);
+}
+
+.session-role-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 16px 18px;
+  background: linear-gradient(180deg, #fff, #fbfcff);
+}
+
+.session-role-identity {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.session-role-icon {
+  width: 38px;
+  height: 38px;
+  flex: 0 0 38px;
+  display: grid;
+  place-items: center;
+  border-radius: 10px;
+  background: var(--precued-blue-100);
+  color: var(--precued-blue-600);
+  font-size: 14px;
+  font-weight: 900;
+}
+
+.session-role-title-line {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.session-role-title-line h3 {
+  margin: 0;
+  color: var(--precued-navy-950);
+  font-size: 15px;
+}
+
+.session-role-identity > div > small {
+  display: block;
+  margin-top: 3px;
+  color: #8790a2;
+  font-size: 11px;
+}
+
+.session-role-badge {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 5px;
+  padding: 3px 7px;
+  background: #f2efff;
+  color: #6848b9;
+  font-size: 10px;
+  font-weight: 800;
+}
+
+.session-participant-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 9px;
+  padding: 13px 18px;
+  border-top: 1px solid #edf0f5;
   background: #fff;
 }
 
-.invite-role-heading {
+.session-person-chip {
+  min-width: 178px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border: 1px solid #e5eaf3;
+  border-radius: 10px;
+  padding: 9px 11px;
+  background: #fbfcff;
+}
+
+.session-person-chip .avatar-placeholder {
+  width: 34px;
+  height: 34px;
+  font-size: 11px;
+}
+
+.session-person-chip strong,
+.session-person-chip small {
+  display: block;
+}
+
+.session-person-chip strong {
+  overflow: hidden;
+  max-width: 180px;
+  color: #26344e;
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.session-person-chip small {
+  margin-top: 2px;
+  color: #7d8799;
+  font-size: 10px;
+}
+
+.session-role-empty {
+  margin: 2px 0;
+  color: #8b94a7;
+  font-size: 12px;
+}
+
+.session-invite-record-list {
+  display: grid;
+  gap: 7px;
+  padding: 0 18px 14px;
+}
+
+.session-invite-record {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border: 1px solid #e8ebf2;
+  border-radius: 10px;
+  padding: 10px 11px;
+  background: #fff;
+}
+
+.session-invite-record-main {
+  min-width: 0;
+}
+
+.session-invite-type {
+  display: block;
+  margin-bottom: 2px;
+  color: var(--precued-blue-600);
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+
+.session-invite-record-main strong,
+.session-invite-record-main small {
+  display: block;
+}
+
+.session-invite-record-main strong {
+  overflow: hidden;
+  max-width: 420px;
+  color: #283651;
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.session-invite-record-main small {
+  margin-top: 2px;
+  color: #858ea0;
+  font-size: 10px;
+}
+
+.session-invite-record-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 0 0 auto;
+}
+
+.session-cancel-invite {
+  color: #a83d4d;
+  font-size: 12px;
+}
+
+.session-invite-tools {
+  border-top: 1px solid #edf0f5;
+}
+
+.session-invite-tools summary {
+  min-height: 48px;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 16px;
-}
-
-.invite-role-heading .role-summary {
-  min-width: 0;
-}
-
-.invite-role-heading .role-summary small {
-  display: block;
-  margin-top: 3px;
-  color: #7d8799;
+  padding: 0 18px;
+  color: #34415b;
+  cursor: pointer;
+  list-style: none;
   font-size: 12px;
+  font-weight: 750;
 }
 
-.invite-host-person {
-  margin-top: 14px;
+.session-invite-tools summary::-webkit-details-marker {
+  display: none;
 }
 
-.invite-joined-summary {
-  display: flex;
-  align-items: baseline;
-  gap: 9px;
-  margin-top: 14px;
-  padding: 10px 12px;
-  border-radius: 9px;
-  background: #f6f9ff;
-  color: #48566f;
-  font-size: 12px;
-}
-
-.invite-record-list {
+.session-invite-tools summary::after {
+  content: "+";
+  width: 24px;
+  height: 24px;
+  flex: 0 0 24px;
   display: grid;
-  gap: 8px;
-  margin-top: 14px;
+  place-items: center;
+  border-radius: 7px;
+  background: #f1f4fb;
+  color: var(--precued-navy-900);
+  font-size: 16px;
+  font-weight: 700;
 }
 
-.invite-record {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
+.session-invite-tools[open] summary::after {
+  content: "−";
+}
+
+.session-invite-tools summary > span {
+  flex: 1;
+}
+
+.session-invite-tools summary small {
+  color: #9098a9;
+  font-size: 10px;
+  font-weight: 600;
+}
+
+.session-invite-create-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 12px;
-  padding: 11px 12px;
-  border: 1px solid #e5e9f1;
-  border-radius: 10px;
+  padding: 0 18px 18px;
+}
+
+.session-invite-create-block {
+  min-width: 0;
+  display: grid;
+  align-content: start;
+  gap: 6px;
+  border: 1px solid #e6eaf2;
+  border-radius: 11px;
+  padding: 13px;
   background: #fbfcff;
 }
 
-.invite-record-main {
-  min-width: 0;
-}
-
-.invite-record-main strong,
-.invite-record-main small {
-  display: block;
-}
-
-.invite-record-main strong {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  color: #24314b;
-  font-size: 13px;
-}
-
-.invite-record-main small {
-  margin-top: 3px;
-  color: #7b8699;
-  font-size: 11px;
-}
-
-.invite-record-actions {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  flex-shrink: 0;
-}
-
-.invite-create-grid {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-  gap: 12px;
-  margin-top: 16px;
-  padding-top: 15px;
-  border-top: 1px solid #edf0f5;
-}
-
-.invite-create-block {
-  display: grid;
-  gap: 7px;
-  min-width: 0;
-}
-
-.invite-create-block > strong {
+.session-invite-create-block > strong {
   color: #34415c;
-  font-size: 12px;
+  font-size: 11px;
 }
 
-.invite-create-block > small {
-  min-height: 32px;
-  color: #8a93a5;
-  font-size: 11px;
+.session-invite-create-block > small {
+  min-height: 30px;
+  color: #8791a4;
+  font-size: 10px;
   line-height: 1.4;
 }
 
-.invite-create-row {
+.session-invite-create-row {
   display: flex;
-  gap: 8px;
   align-items: stretch;
+  gap: 7px;
 }
 
-.invite-create-row input {
+.session-invite-create-row input {
   min-width: 0;
+  min-height: 36px;
   flex: 1;
-  min-height: 38px;
   border: 1px solid #d8dfeb;
   border-radius: 8px;
   padding: 0 10px;
-  color: #24314b;
-  background: #fff;
   outline: none;
+  background: #fff;
+  color: #24314b;
+  font-size: 12px;
 }
 
-.invite-create-row input:focus {
-  border-color: #6686ed;
-  box-shadow: 0 0 0 3px rgba(102, 134, 237, .12);
+.session-invite-create-row input:focus {
+  border-color: var(--precued-blue-600);
+  box-shadow: 0 0 0 3px rgba(79, 110, 247, .1);
 }
 
-.invite-create-row input:disabled {
-  background: #f5f7fa;
-  color: #98a0af;
+.session-invite-create-row input:disabled {
+  background: #f2f4f8;
+  color: #9aa2b0;
 }
 
 .invite-uses-input {
-  max-width: 90px;
+  max-width: 84px;
 }
 
-.readiness-item small + small {
+.session-readiness-card {
+  position: sticky;
+  top: 82px;
+}
+
+.session-readiness-list {
+  display: grid;
+  gap: 16px;
+  margin: 22px 0;
+}
+
+.session-readiness-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 11px;
+}
+
+.session-readiness-dot {
+  width: 23px;
+  height: 23px;
+  flex: 0 0 23px;
+  display: grid;
+  place-items: center;
+  border: 1.5px solid #b7bfce;
+  border-radius: 50%;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.session-readiness-dot.ready {
+  border-color: #2ea65a;
+  background: #2ea65a;
+}
+
+.session-readiness-item strong,
+.session-readiness-item small {
+  display: block;
+}
+
+.session-readiness-item strong {
+  color: #29364f;
+  font-size: 13px;
+}
+
+.session-readiness-item small {
   margin-top: 2px;
+  color: #7f899d;
+  font-size: 10px;
+  line-height: 1.35;
 }
 
-@media (max-width: 880px) {
-  .invite-create-grid {
+.session-readiness-names {
+  color: #5e6980 !important;
+}
+
+.session-start-button {
+  min-height: 46px;
+}
+
+.session-structure-preview {
+  margin-top: 20px;
+  padding-top: 18px;
+  border-top: 1px solid var(--precued-border);
+}
+
+.session-structure-preview-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.session-structure-preview-heading h3 {
+  margin: 3px 0 0;
+  color: var(--precued-navy-950);
+  font-size: 15px;
+}
+
+.session-structure-preview-heading > span {
+  margin-top: 2px;
+  border-radius: 999px;
+  padding: 4px 8px;
+  background: #f1f4fb;
+  color: #71809b;
+  font-size: 9px;
+  font-weight: 800;
+}
+
+.session-structure-empty,
+.session-structure-more {
+  margin: 12px 0 0;
+  color: #858fa2;
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.session-structure-stage-list {
+  display: grid;
+  gap: 9px;
+  margin: 14px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.session-structure-stage-list li {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+
+.session-stage-index {
+  width: 24px;
+  height: 24px;
+  flex: 0 0 24px;
+  display: grid;
+  place-items: center;
+  border-radius: 7px;
+  background: var(--precued-blue-100);
+  color: var(--precued-blue-600);
+  font-size: 10px;
+  font-weight: 900;
+}
+
+.session-structure-stage-list strong,
+.session-structure-stage-list small {
+  display: block;
+}
+
+.session-structure-stage-list strong {
+  color: #34415a;
+  font-size: 11px;
+}
+
+.session-structure-stage-list small {
+  margin-top: 1px;
+  color: #9098a8;
+  font-size: 9px;
+}
+
+@media (max-width: 980px) {
+  .session-setup-layout {
     grid-template-columns: 1fr;
+  }
+
+  .session-readiness-card {
+    position: static;
+  }
+
+  .session-readiness-list {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 
-@media (max-width: 620px) {
-  .invite-role-heading,
-  .invite-record,
-  .invite-create-row {
+@media (max-width: 760px) {
+  .session-setup-heading {
+    margin-inline: 0;
+  }
+
+  .session-roster-card,
+  .session-readiness-card {
+    padding: 18px;
+  }
+
+  .session-card-heading,
+  .session-role-heading,
+  .session-invite-record {
     align-items: stretch;
     flex-direction: column;
   }
 
-  .invite-record-actions {
-    width: 100%;
-  }
-
-  .invite-record-actions button {
-    flex: 1;
-  }
-
-  .invite-role-heading .status-pill {
+  .session-role-count,
+  .session-role-heading .status-pill {
     align-self: flex-start;
+  }
+
+  .session-invite-create-grid,
+  .session-readiness-list {
+    grid-template-columns: 1fr;
+  }
+
+  .session-invite-record-actions {
+    justify-content: flex-start;
+  }
+}
+
+@media (max-width: 560px) {
+  .session-setup-page {
+    width: min(100% - 28px, 1180px);
+  }
+
+  .session-invite-tools summary {
+    align-items: flex-start;
+    flex-wrap: wrap;
+    padding-block: 12px;
+  }
+
+  .session-invite-tools summary small {
+    width: 100%;
+    order: 3;
+  }
+
+  .session-invite-create-row {
+    flex-direction: column;
+  }
+
+  .session-invite-create-row .compact {
+    width: 100%;
   }
 
   .invite-uses-input {
     max-width: none;
+  }
+
+  .session-person-chip {
+    width: 100%;
   }
 }
