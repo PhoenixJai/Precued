@@ -41,11 +41,13 @@ export default function LiveSessionRoute() {
 
       <button
         type="button"
-        className="live-session-panel-toggle"
+        className="live-session-sidebar-caret"
         aria-expanded={panelsOpen}
+        aria-label={panelsOpen ? "Hide settings sidebar" : "Show settings sidebar"}
+        title={panelsOpen ? "Hide settings sidebar" : "Show settings sidebar"}
         onClick={() => setPanelsOpen((open) => !open)}
       >
-        {panelsOpen ? "Hide panels" : "Show panels"}
+        <span aria-hidden="true">{panelsOpen ? "›" : "‹"}</span>
       </button>
 
       <CallPage />
