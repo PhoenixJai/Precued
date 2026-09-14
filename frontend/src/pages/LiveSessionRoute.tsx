@@ -1,14 +1,22 @@
+import type { CSSProperties } from "react";
 import { Link, useParams } from "react-router-dom";
 import { SessionFlowCallDock } from "../components/SessionFlowCallDock";
-import { liveSessionRailItems, liveSessionStatusCopy } from "../lib/liveSessionUi";
+import {
+  liveSessionDesktopGridTemplate,
+  liveSessionRailItems,
+  liveSessionStatusCopy,
+} from "../lib/liveSessionUi";
 import CallPage from "./CallPage";
 
 export default function LiveSessionRoute() {
   const { roomId = "" } = useParams();
   const railItems = liveSessionRailItems();
+  const layoutStyle = {
+    "--live-session-desktop-columns": liveSessionDesktopGridTemplate(),
+  } as CSSProperties;
 
   return (
-    <div className="live-session-route">
+    <div className="live-session-route" style={layoutStyle}>
       <aside className="live-session-rail" aria-label="Live session workspace">
         <div className="live-session-rail-mark" aria-hidden="true">
           <span />
