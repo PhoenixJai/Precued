@@ -5,8 +5,11 @@ export interface LiveSessionRailItem {
 
 export interface LiveSessionShellPolicy {
   showGlobalNavigation: boolean;
-  sessionFlowPlacement: "inline";
+  showAppRail: boolean;
+  workspaceMode: "full-viewport";
+  sessionFlowPlacement: "compact-topbar";
   sessionFlowOwner: "live-session-route";
+  utilityPanel: "collapsible-right";
 }
 
 export function liveSessionRailItems(): LiveSessionRailItem[] {
@@ -23,22 +26,27 @@ export function liveSessionStatusCopy(connected: boolean): "Live" | "Connecting"
 }
 
 /**
- * Desktop live-session layout contract: the main workspace is allowed to
- * shrink while the participant rail always owns its own dedicated column.
+ * Desktop active-session layout: shared content owns the flexible canvas and
+ * visibility/participants live in a roomy utility column. The route can
+ * collapse that utility column so screen shares and presentations become
+ * effectively full width without changing any media or visibility state.
  */
 export function liveSessionDesktopGridTemplate(): string {
-  return "minmax(0, 1fr) 320px";
+  return "minmax(0, 1fr) minmax(340px, 400px)";
 }
 
 /**
- * The live route owns its own chrome and Session Flow surface. This prevents
- * the global AppShell header and its historical call-flow injection from
- * rendering a second navigation shell or a duplicate flow card.
+ * Active sessions intentionally leave the normal application chrome behind.
+ * They behave like a conferencing workspace: full viewport, compact stage
+ * context, and an optional right-side utility panel.
  */
 export function liveSessionShellPolicy(): LiveSessionShellPolicy {
   return {
     showGlobalNavigation: false,
-    sessionFlowPlacement: "inline",
+    showAppRail: false,
+    workspaceMode: "full-viewport",
+    sessionFlowPlacement: "compact-topbar",
     sessionFlowOwner: "live-session-route",
+    utilityPanel: "collapsible-right",
   };
 }
