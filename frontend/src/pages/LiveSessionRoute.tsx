@@ -13,6 +13,7 @@ import {
 } from "../lib/shareStageFullscreen";
 import CallPage from "./CallPage";
 import "../shareStageFullscreen.css";
+import "../liveSessionUtilitySidebar.css";
 
 export default function LiveSessionRoute() {
   const { roomId = "" } = useParams();
