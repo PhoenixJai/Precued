@@ -47,9 +47,11 @@ describe("live session shell ui", () => {
     expect(shouldShowSharingSidebar("share", true)).toBe(true);
   });
 
-  it("moves Session Flow into the contextual sharing drawer while sharing", () => {
-    expect(sessionFlowSurface("grid")).toBe("topbar");
-    expect(sessionFlowSurface("share")).toBe("sidebar");
+  it("moves host Session Flow into the sharing drawer while guests keep context visible", () => {
+    expect(sessionFlowSurface("grid", true)).toBe("topbar");
+    expect(sessionFlowSurface("grid", false)).toBe("topbar");
+    expect(sessionFlowSurface("share", true)).toBe("sidebar");
+    expect(sessionFlowSurface("share", false)).toBe("topbar");
   });
 
   it("keeps the sharing drawer focused on real in-session controls", () => {
