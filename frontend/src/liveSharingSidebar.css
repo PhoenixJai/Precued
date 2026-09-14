@@ -1,0 +1,277 @@
+/* PR B: contextual sharing drawer.
+   Visibility stays primary; display actions and Session Flow follow underneath.
+   The drawer is host/sharer-only and is collapsed by default by LiveSessionRoute. */
+
+.live-session-route.session-mode-share .visibility-controls {
+  display: flex !important;
+  flex-direction: column;
+  gap: 12px;
+  min-height: 0;
+  height: 100%;
+  padding: 14px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  border: 1px solid #253754;
+  border-radius: 14px;
+  background: #0d1a2e;
+  color: #eef4ff;
+  box-shadow: 0 16px 36px rgba(7, 18, 35, .22);
+  scrollbar-color: #3b4f70 transparent;
+}
+
+.live-session-route.session-mode-share .sharing-sidebar-header {
+  order: -20;
+  display: grid;
+  gap: 3px;
+  padding: 2px 2px 11px;
+  border-bottom: 1px solid rgba(219, 229, 245, .13);
+}
+.live-session-route.session-mode-share .sharing-sidebar-eyebrow,
+.live-session-route.session-mode-share .sharing-sidebar-section-label {
+  color: #87a9f7;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+.live-session-route.session-mode-share .sharing-sidebar-header strong {
+  color: #fff;
+  font-size: 18px;
+  line-height: 1.2;
+}
+.live-session-route.session-mode-share .sharing-sidebar-header small {
+  color: #9facbf;
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+/* Existing visibility UI becomes the first real drawer section. */
+.live-session-route.session-mode-share .visibility-controls > strong,
+.live-session-route.session-mode-share .presentation-visibility-heading {
+  order: -15;
+}
+.live-session-route.session-mode-share .visibility-controls > strong,
+.live-session-route.session-mode-share .presentation-visibility-heading strong {
+  color: #fff;
+}
+.live-session-route.session-mode-share .presentation-visibility-heading small {
+  color: #9facbf;
+}
+.live-session-route.session-mode-share .presentation-slide-strip {
+  order: -14;
+  padding-bottom: 7px;
+}
+.live-session-route.session-mode-share .simple-visibility-grid {
+  order: -13;
+  gap: 9px;
+}
+.live-session-route.session-mode-share .simple-visibility-section {
+  padding: 11px;
+  border-color: rgba(190, 205, 228, .15);
+  background: #12233c;
+}
+.live-session-route.session-mode-share .simple-visibility-label {
+  color: #aebbd0;
+}
+.live-session-route.session-mode-share .visibility-segmented {
+  border-color: #31425e;
+  background: #101e33;
+}
+.live-session-route.session-mode-share .visibility-segmented button {
+  border-right-color: #31425e;
+  background: #101e33;
+  color: #c4cee0;
+}
+.live-session-route.session-mode-share .visibility-segmented button:hover:not(:disabled) {
+  background: #172a47;
+}
+.live-session-route.session-mode-share .visibility-segmented button.active {
+  background: #356ff2;
+  color: #fff;
+}
+.live-session-route.session-mode-share .visibility-role-choices label {
+  border-color: #354862;
+  background: #101e33;
+  color: #c7d2e4;
+}
+.live-session-route.session-mode-share .visibility-role-choices label.selected {
+  border-color: #6f96f3;
+  background: #17315e;
+  color: #fff;
+}
+
+.live-session-route.session-mode-share .preset-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+.live-session-route.session-mode-share .preset-tabs button {
+  border-color: #354862;
+  background: #101e33;
+  color: #c7d2e4;
+}
+.live-session-route.session-mode-share .preset-tabs button.active {
+  border-color: #6f96f3;
+  background: #17315e;
+  color: #fff;
+}
+
+/* Advanced visibility remains secondary and readable inside the dark drawer. */
+.live-session-route.session-mode-share .advanced-visibility-toggle {
+  order: -12;
+  border-color: #354862;
+  background: #101e33;
+  color: #e9effa;
+}
+.live-session-route.session-mode-share .advanced-visibility-toggle:hover:not(:disabled) {
+  background: #172a47;
+}
+.live-session-route.session-mode-share .advanced-visibility-panel {
+  order: -11;
+  padding: 10px;
+  border-radius: 10px;
+  background: #fff;
+  color: #16233a;
+}
+.live-session-route.session-mode-share .advanced-visibility-copy small {
+  color: #67748a;
+}
+
+.live-session-route.session-mode-share .sharing-sidebar-actions {
+  order: 20;
+  display: grid;
+  gap: 8px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(219, 229, 245, .13);
+}
+.live-session-route.session-mode-share .sharing-sidebar-action-button {
+  min-height: 38px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border: 1px solid #354862;
+  border-radius: 9px;
+  background: #12233c;
+  color: #f4f7fc;
+  font-size: 12px;
+  font-weight: 750;
+}
+.live-session-route.session-mode-share .sharing-sidebar-action-button:hover:not(:disabled) {
+  background: #193050;
+}
+
+.live-session-route.session-mode-share .sharing-sidebar-flow-section {
+  order: 30;
+  border-top: 1px solid rgba(219, 229, 245, .13);
+}
+.live-session-route.session-mode-share .sharing-sidebar-flow-section > summary {
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  cursor: pointer;
+  color: #eef4ff;
+  font-size: 12px;
+  font-weight: 750;
+  list-style: none;
+}
+.live-session-route.session-mode-share .sharing-sidebar-flow-section > summary::-webkit-details-marker {
+  display: none;
+}
+.live-session-route.session-mode-share .sharing-sidebar-flow-content {
+  margin-bottom: 10px;
+  overflow: hidden;
+  border-radius: 10px;
+  background: #fff;
+  color: #16233a;
+}
+.live-session-route.session-mode-share .sharing-sidebar-flow-content .session-flow-dock,
+.live-session-route.session-mode-share .sharing-sidebar-flow-content .session-flow-panel {
+  width: 100%;
+  margin: 0;
+}
+.live-session-route.session-mode-share .sharing-sidebar-flow-content .session-flow-panel {
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.live-session-route.session-mode-share .sharing-sidebar-participant-summary {
+  order: 40;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 3px 8px;
+  padding: 11px 0 2px;
+  border-top: 1px solid rgba(219, 229, 245, .13);
+  color: #dce6f6;
+  font-size: 12px;
+}
+.live-session-route.session-mode-share .sharing-sidebar-participant-summary strong {
+  color: #fff;
+}
+.live-session-route.session-mode-share .sharing-sidebar-participant-summary small {
+  grid-column: 1 / -1;
+  color: #93a2b8;
+  font-size: 10px;
+}
+
+/* The caret is mounted inside the call workspace so it remains reachable in
+   browser fullscreen. It hugs the drawer edge instead of floating elsewhere. */
+.live-session-route .call-grid > .live-session-sidebar-caret {
+  position: absolute;
+  top: 50%;
+  right: 0;
+  z-index: 45;
+  width: 30px;
+  height: 62px;
+  display: grid;
+  place-items: center;
+  transform: translateY(-50%);
+  border: 1px solid #2f4567;
+  border-right: 0;
+  border-radius: 12px 0 0 12px;
+  background: #10213a;
+  color: #fff;
+  box-shadow: -6px 8px 20px rgba(6, 17, 33, .2);
+  font-size: 25px;
+  line-height: 1;
+  cursor: pointer;
+  transition: right .18s ease, background .16s ease;
+}
+.live-session-route.sharing-sidebar-open .call-grid > .live-session-sidebar-caret {
+  right: 346px;
+}
+.live-session-route .call-grid > .live-session-sidebar-caret:hover {
+  background: #173154;
+}
+
+/* PR A intentionally hid the drawer in fullscreen. PR B keeps it available
+   to the sharer when explicitly expanded, while participants stay visible. */
+.live-session-route.session-mode-share.sharing-sidebar-open .call-grid:fullscreen {
+  grid-template-columns: minmax(0, 1fr) 360px !important;
+}
+.live-session-route.session-mode-share.sharing-sidebar-open .call-grid:fullscreen .visibility-controls {
+  display: flex !important;
+  grid-column: 2 !important;
+  grid-row: 1 !important;
+}
+.live-session-route.session-mode-share.sharing-sidebar-open .call-grid:fullscreen .share-stage {
+  grid-column: 1 !important;
+  grid-row: 1 !important;
+}
+.live-session-route.session-mode-share.sharing-sidebar-open .call-grid:fullscreen .video-strip {
+  grid-column: 1 / -1 !important;
+  grid-row: 2 !important;
+}
+
+@media (max-width: 1000px) {
+  .live-session-route.session-mode-share .visibility-controls {
+    border-radius: 12px;
+    max-height: 55vh;
+  }
+  .live-session-route .call-grid > .live-session-sidebar-caret {
+    display: none;
+  }
+}
