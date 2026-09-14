@@ -3,15 +3,22 @@ export interface LiveSessionRailItem {
   href: string | null;
 }
 
+export type LiveSessionMode = "grid" | "share";
+export type ParticipantGridLayout = "single" | "two-up" | "three-up" | "quad" | "gallery";
+
 export interface LiveSessionShellPolicy {
   showGlobalNavigation: boolean;
   showAppRail: boolean;
   workspaceMode: "full-viewport";
   sessionFlowPlacement: "compact-topbar";
   sessionFlowOwner: "live-session-route";
-  utilityPanel: "collapsible-sidebar";
-  utilitySections: ["visibility", "participants"];
-  participantPlacement: "bottom-filmstrip";
+  utilityPanel: "share-only-collapsible-sidebar";
+  utilityDefault: "collapsed";
+  participantPlacement: {
+    grid: "main-grid";
+    share: "bottom-filmstrip";
+  };
+  fullscreenParticipants: "visible";
   collapseControl: "edge-caret";
 }
 
@@ -28,18 +35,30 @@ export function liveSessionStatusCopy(connected: boolean): "Live" | "Connecting"
   return connected ? "Live" : "Connecting";
 }
 
+export function liveSessionMode(hasActiveShare: boolean): LiveSessionMode {
+  return hasActiveShare ? "share" : "grid";
+}
+
+export function participantGridLayout(participantCount: number): ParticipantGridLayout {
+  if (participantCount <= 1) return "single";
+  if (participantCount === 2) return "two-up";
+  if (participantCount === 3) return "three-up";
+  if (participantCount === 4) return "quad";
+  return "gallery";
+}
+
 /**
- * Desktop active-session layout: shared content owns the flexible canvas and
- * a dedicated utility sidebar occupies a predictable fixed-width column.
+ * Desktop share-mode layout: shared content owns the flexible canvas and a
+ * dedicated utility sidebar occupies a predictable fixed-width column.
  */
 export function liveSessionDesktopGridTemplate(): string {
   return "minmax(0, 1fr) 360px";
 }
 
 /**
- * Active sessions intentionally leave the normal application chrome behind.
- * The bottom row is reserved for participant media, while visibility and
- * participant metadata live in one collapsible sidebar with an edge caret.
+ * Active sessions are participant-first until somebody shares. Sharing then
+ * promotes content to the main stage, moves participants into a bottom
+ * filmstrip, and exposes an optional right-side control drawer for the sharer.
  */
 export function liveSessionShellPolicy(): LiveSessionShellPolicy {
   return {
@@ -48,9 +67,13 @@ export function liveSessionShellPolicy(): LiveSessionShellPolicy {
     workspaceMode: "full-viewport",
     sessionFlowPlacement: "compact-topbar",
     sessionFlowOwner: "live-session-route",
-    utilityPanel: "collapsible-sidebar",
-    utilitySections: ["visibility", "participants"],
-    participantPlacement: "bottom-filmstrip",
+    utilityPanel: "share-only-collapsible-sidebar",
+    utilityDefault: "collapsed",
+    participantPlacement: {
+      grid: "main-grid",
+      share: "bottom-filmstrip",
+    },
+    fullscreenParticipants: "visible",
     collapseControl: "edge-caret",
   };
 }
