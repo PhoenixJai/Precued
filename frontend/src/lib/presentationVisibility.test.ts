@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { cellState, planCellStateChange } from "./presentationVisibility";
+import {
+  cellState,
+  planCellStateChange,
+  planScopedAudienceChange,
+  selectedRoleIdsForScope,
+  visibilityAudienceMode,
+} from "./presentationVisibility";
 import type { ShareRoleGrant } from "../types/precued";
 
 function grant(overrides: Partial<ShareRoleGrant> & { id: string; roomRoleId: string }): ShareRoleGrant {
@@ -99,5 +105,89 @@ describe("planCellStateChange", () => {
     const grants = [grant({ id: "other", roomRoleId: "role-B", shareSlideId: null })];
     const plan = planCellStateChange("role-A", "slide-1", "hidden", grants);
     expect(plan.toRevokeGrantIds).toEqual([]);
+  });
+});
+
+describe("simplified presentation visibility", () => {
+  it("derives current-slide visibility from both whole-presentation and current-slide grants", () => {
+    const grants = [
+      grant({ id: "whole", roomRoleId: "role-A", shareSlideId: null }),
+      grant({ id: "current", roomRoleId: "role-B", shareSlideId: "slide-1" }),
+      grant({ id: "other-slide", roomRoleId: "role-C", shareSlideId: "slide-2" }),
+    ];
+
+    expect(selectedRoleIdsForScope(["role-A", "role-B", "role-C"], "slide-1", "slide", grants))
+      .toEqual(["role-A", "role-B"]);
+  });
+
+  it("derives entire-presentation visibility only from whole-share grants", () => {
+    const grants = [
+      grant({ id: "whole", roomRoleId: "role-A", shareSlideId: null }),
+      grant({ id: "current", roomRoleId: "role-B", shareSlideId: "slide-1" }),
+    ];
+
+    expect(selectedRoleIdsForScope(["role-A", "role-B"], "slide-1", "presentation", grants))
+      .toEqual(["role-A"]);
+  });
+
+  it("reports Everyone only when every available role is selected", () => {
+    expect(visibilityAudienceMode(["role-A", "role-B"], ["role-A", "role-B"])).toBe("everyone");
+    expect(visibilityAudienceMode(["role-A", "role-B"], ["role-A"])).toBe("specific");
+    expect(visibilityAudienceMode([], [])).toBe("specific");
+  });
+
+  it("applies Entire presentation by normalizing selected roles to whole-share and fully hiding unselected roles", () => {
+    const grants = [
+      grant({ id: "a-slide", roomRoleId: "role-A", shareSlideId: "slide-1" }),
+      grant({ id: "b-whole", roomRoleId: "role-B", shareSlideId: null }),
+      grant({ id: "b-slide", roomRoleId: "role-B", shareSlideId: "slide-2" }),
+    ];
+
+    const plan = planScopedAudienceChange(
+      ["role-A", "role-B"],
+      ["role-A"],
+      ["slide-1", "slide-2"],
+      "slide-1",
+      "presentation",
+      grants,
+    );
+
+    expect(plan.toCreate).toEqual([{ roomRoleId: "role-A", shareSlideId: null }]);
+    expect(plan.toRevokeGrantIds.sort()).toEqual(["a-slide", "b-slide", "b-whole"].sort());
+  });
+
+  it("hiding a role on This slide preserves its visibility on every other slide when it was previously Always", () => {
+    const grants = [grant({ id: "whole", roomRoleId: "role-A", shareSlideId: null })];
+
+    const plan = planScopedAudienceChange(
+      ["role-A"],
+      [],
+      ["slide-1", "slide-2", "slide-3"],
+      "slide-1",
+      "slide",
+      grants,
+    );
+
+    expect(plan.toRevokeGrantIds).toEqual(["whole"]);
+    expect(plan.toCreate).toEqual([
+      { roomRoleId: "role-A", shareSlideId: "slide-2" },
+      { roomRoleId: "role-A", shareSlideId: "slide-3" },
+    ]);
+  });
+
+  it("changing This slide leaves unrelated slide-specific grants untouched", () => {
+    const grants = [grant({ id: "other", roomRoleId: "role-A", shareSlideId: "slide-2" })];
+
+    const plan = planScopedAudienceChange(
+      ["role-A"],
+      ["role-A"],
+      ["slide-1", "slide-2"],
+      "slide-1",
+      "slide",
+      grants,
+    );
+
+    expect(plan.toRevokeGrantIds).toEqual([]);
+    expect(plan.toCreate).toEqual([{ roomRoleId: "role-A", shareSlideId: "slide-1" }]);
   });
 });
