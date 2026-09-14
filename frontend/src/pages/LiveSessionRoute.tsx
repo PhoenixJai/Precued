@@ -4,13 +4,17 @@ import { createPortal } from "react-dom";
 import { useParams } from "react-router-dom";
 import { SessionFlowCallDock } from "../components/SessionFlowCallDock";
 import {
+  availableLiveViewModes,
+  defaultLiveViewMode,
   liveSessionDesktopGridTemplate,
   liveSessionMode,
   liveSessionShellPolicy,
   participantGridLayout,
+  participantMediaMode,
   sessionFlowSurface,
   shouldShowSharingSidebar,
 } from "../lib/liveSessionUi";
+import type { LiveSessionMode, LiveViewMode } from "../lib/liveSessionUi";
 import {
   fullscreenButtonLabel,
   toggleShareStageFullscreen,
@@ -20,6 +24,7 @@ import "../shareStageFullscreen.css";
 import "../liveSessionUtilitySidebar.css";
 import "../liveSessionGridFirst.css";
 import "../liveSharingSidebar.css";
+import "../liveViewControls.css";
 
 export default function LiveSessionRoute() {
   const { roomId = "" } = useParams();
@@ -28,12 +33,17 @@ export default function LiveSessionRoute() {
   const [participantCount, setParticipantCount] = useState(1);
   const [gridLayout, setGridLayout] = useState(() => participantGridLayout(1));
   const [panelsOpen, setPanelsOpen] = useState(false);
+  const [viewMode, setViewMode] = useState<LiveViewMode>("gallery");
   const shellPolicy = liveSessionShellPolicy();
   const mode = liveSessionMode(hasActiveShare);
   const showSharingSidebar = shouldShowSharingSidebar(mode, canManageShare);
   const layoutStyle = {
     "--live-session-desktop-columns": liveSessionDesktopGridTemplate(),
   } as CSSProperties;
+
+  useEffect(() => {
+    setViewMode(defaultLiveViewMode(mode));
+  }, [mode]);
 
   useEffect(() => {
     const resolveWorkspace = () => {
@@ -64,12 +74,14 @@ export default function LiveSessionRoute() {
         "live-session-route",
         shellPolicy.showGlobalNavigation ? "" : "live-session-route--standalone",
         `session-mode-${mode}`,
+        `session-view-${viewMode}`,
         `participant-layout-${gridLayout}`,
         panelsOpen ? "sharing-sidebar-open" : "panels-collapsed",
       ].filter(Boolean).join(" ")}
       data-session-flow-placement={shellPolicy.sessionFlowPlacement}
       data-workspace-mode={shellPolicy.workspaceMode}
       data-session-mode={mode}
+      data-live-view={viewMode}
       data-participant-layout={gridLayout}
       data-sharing-sidebar={showSharingSidebar ? (panelsOpen ? "open" : "collapsed") : "unavailable"}
       style={layoutStyle}
@@ -81,6 +93,14 @@ export default function LiveSessionRoute() {
       )}
 
       <CallPage />
+
+      <LiveViewControl
+        mode={mode}
+        value={viewMode}
+        onChange={setViewMode}
+      />
+
+      <ParticipantCameraFallbacks />
 
       <SharingSidebarCaretPortal
         visible={showSharingSidebar}
@@ -99,6 +119,129 @@ export default function LiveSessionRoute() {
       <LiveWorkspaceFullscreenControl />
     </div>
   );
+}
+
+function LiveViewControl(props: {
+  mode: LiveSessionMode;
+  value: LiveViewMode;
+  onChange: (view: LiveViewMode) => void;
+}) {
+  const [target, setTarget] = useState<HTMLElement | null>(null);
+  const [open, setOpen] = useState(false);
+  const options = availableLiveViewModes(props.mode);
+  const labels: Record<LiveViewMode, string> = {
+    gallery: "Gallery",
+    speaker: "Speaker",
+    share: "Shared content",
+  };
+
+  useEffect(() => {
+    const resolveTarget = () => {
+      setTarget(document.querySelector<HTMLElement>(".live-session-route .call-controls"));
+    };
+    resolveTarget();
+    const observer = new MutationObserver(resolveTarget);
+    observer.observe(document.body, { childList: true, subtree: true });
+    return () => observer.disconnect();
+  }, []);
+
+  useEffect(() => setOpen(false), [props.mode]);
+
+  if (!target) return null;
+
+  return createPortal(
+    <div className="live-view-control-wrap">
+      <button
+        type="button"
+        className="call-control live-view-control-button"
+        aria-haspopup="menu"
+        aria-expanded={open}
+        onClick={() => setOpen((current) => !current)}
+      >
+        <span aria-hidden="true">▦</span>
+        <small>View</small>
+      </button>
+      {open && (
+        <div className="live-view-menu" role="menu" aria-label="Change session view">
+          <div className="live-view-menu-heading">View</div>
+          {options.map((option) => (
+            <button
+              key={option}
+              type="button"
+              role="menuitemradio"
+              aria-checked={props.value === option}
+              className={props.value === option ? "active" : ""}
+              onClick={() => {
+                props.onChange(option);
+                setOpen(false);
+              }}
+            >
+              <span aria-hidden="true">{option === "gallery" ? "▦" : option === "speaker" ? "▣" : "▤"}</span>
+              <span>{labels[option]}</span>
+              {props.value === option && <span className="live-view-check" aria-hidden="true">✓</span>}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>,
+    target,
+  );
+}
+
+function ParticipantCameraFallbacks() {
+  useEffect(() => {
+    const updateTiles = () => {
+      document.querySelectorAll<HTMLElement>(".live-session-route .video-tile").forEach((tile) => {
+        const video = tile.querySelector<HTMLVideoElement>("video");
+        if (!video) {
+          tile.classList.remove("camera-fallback");
+          delete tile.dataset.participantInitials;
+          return;
+        }
+
+        const stream = video.srcObject instanceof MediaStream ? video.srcObject : null;
+        const track = stream?.getVideoTracks()[0];
+        const cameraMuted = !track
+          || track.muted
+          || !track.enabled
+          || track.readyState !== "live"
+          || video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA;
+        const mediaMode = participantMediaMode(Boolean(track), cameraMuted);
+
+        if (mediaMode === "avatar") {
+          const labelText = tile.querySelector<HTMLElement>(".video-label")?.textContent ?? "";
+          const displayName = labelText
+            .replace(/^\s*◉\s*/, "")
+            .replace(/\s+Host\s*$/, "")
+            .replace(/\s+You\s*$/, "")
+            .trim();
+          const initials = displayName
+            .split(/\s+/)
+            .filter(Boolean)
+            .slice(0, 2)
+            .map((part) => part.charAt(0).toUpperCase())
+            .join("") || "•";
+
+          tile.classList.add("camera-fallback");
+          tile.dataset.participantInitials = initials;
+        } else {
+          tile.classList.remove("camera-fallback");
+          delete tile.dataset.participantInitials;
+        }
+      });
+    };
+
+    updateTiles();
+    const observer = new MutationObserver(updateTiles);
+    observer.observe(document.body, { childList: true, subtree: true });
+    const timer = window.setInterval(updateTiles, 500);
+    return () => {
+      observer.disconnect();
+      window.clearInterval(timer);
+    };
+  }, []);
+
+  return null;
 }
 
 function SharingSidebarCaretPortal(props: {
