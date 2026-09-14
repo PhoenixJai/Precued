@@ -4,6 +4,7 @@ import { SessionFlowCallDock } from "../components/SessionFlowCallDock";
 import {
   liveSessionDesktopGridTemplate,
   liveSessionRailItems,
+  liveSessionShellPolicy,
   liveSessionStatusCopy,
 } from "../lib/liveSessionUi";
 import CallPage from "./CallPage";
@@ -11,12 +12,17 @@ import CallPage from "./CallPage";
 export default function LiveSessionRoute() {
   const { roomId = "" } = useParams();
   const railItems = liveSessionRailItems();
+  const shellPolicy = liveSessionShellPolicy();
   const layoutStyle = {
     "--live-session-desktop-columns": liveSessionDesktopGridTemplate(),
   } as CSSProperties;
 
   return (
-    <div className="live-session-route" style={layoutStyle}>
+    <div
+      className={`live-session-route ${shellPolicy.showGlobalNavigation ? "" : "live-session-route--standalone"}`.trim()}
+      data-session-flow-placement={shellPolicy.sessionFlowPlacement}
+      style={layoutStyle}
+    >
       <aside className="live-session-rail" aria-label="Live session workspace">
         <div className="live-session-rail-mark" aria-hidden="true">
           <span />
